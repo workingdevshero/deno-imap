@@ -1,5 +1,3 @@
-import { decodeBase64, decodeQuotedPrintable } from "../fetch.ts";
-
 /**
  * Decodes message body based on Content-Transfer-Encoding
  * @param body Message body as string
@@ -82,4 +80,38 @@ export function parseMultipartMessage(body: string, boundary: string): string {
   }
 
   return "No readable content found in the message.";
+}
+
+/**
+ * Decodes a base64 encoded string
+ * @param str Base64 encoded string
+ * @returns Decoded string
+ */
+function decodeBase64(str: string): string {
+  try {
+    return new TextDecoder().decode(
+      Uint8Array.from(atob(str), (c) => c.charCodeAt(0))
+    );
+  } catch (error) {
+    console.warn("Failed to decode base64:", error);
+    return str;
+  }
+}
+
+/**
+ * Decodes a quoted-printable encoded string
+ * @param str Quoted-printable encoded string
+ * @returns Decoded string
+ */
+function decodeQuotedPrintable(str: string): string {
+  try {
+    return str
+      .replace(/=\r\n/g, "")
+      .replace(/=([0-9A-F]{2})/g, (_, hex) =>
+        String.fromCharCode(parseInt(hex, 16))
+      );
+  } catch (error) {
+    console.warn("Failed to decode quoted-printable:", error);
+    return str;
+  }
 }

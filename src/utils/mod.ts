@@ -18,7 +18,7 @@ import { ImapFetchOptions, ImapMessage, ImapSearchCriteria } from "../types/mod.
 export async function fetchAllMessages(
   client: ImapClient,
   mailbox: string,
-  options: ImapFetchOptions = { flags: true, envelope: true },
+  options: ImapFetchOptions = { flags: true, envelope: true, uid: true },
 ): Promise<ImapMessage[]> {
   // Select the mailbox
   await client.selectMailbox(mailbox);
@@ -30,8 +30,11 @@ export async function fetchAllMessages(
     return [];
   }
   
+  // Ensure UID is included in the fetch options
+  const fetchOptions = { ...options, uid: true };
+  
   // Fetch all messages
-  return await client.fetch(`1:${status.exists}`, options);
+  return await client.fetch(`1:${status.exists}`, fetchOptions);
 }
 
 /**
@@ -46,7 +49,7 @@ export async function searchAndFetchMessages(
   client: ImapClient,
   mailbox: string,
   criteria: ImapSearchCriteria,
-  options: ImapFetchOptions = { flags: true, envelope: true },
+  options: ImapFetchOptions = { flags: true, envelope: true, uid: true },
 ): Promise<ImapMessage[]> {
   // Select the mailbox
   await client.selectMailbox(mailbox);
@@ -58,8 +61,11 @@ export async function searchAndFetchMessages(
     return [];
   }
   
+  // Ensure UID is included in the fetch options
+  const fetchOptions = { ...options, uid: true };
+  
   // Fetch the messages
-  return await client.fetch(messageNumbers.join(","), options);
+  return await client.fetch(messageNumbers.join(","), fetchOptions);
 }
 
 /**
@@ -72,7 +78,7 @@ export async function searchAndFetchMessages(
 export async function fetchUnreadMessages(
   client: ImapClient,
   mailbox: string,
-  options: ImapFetchOptions = { flags: true, envelope: true },
+  options: ImapFetchOptions = { flags: true, envelope: true, uid: true },
 ): Promise<ImapMessage[]> {
   // First, select the mailbox
   await client.selectMailbox(mailbox);
@@ -84,8 +90,11 @@ export async function fetchUnreadMessages(
     return [];
   }
   
+  // Ensure UID is included in the fetch options
+  const fetchOptions = { ...options, uid: true };
+  
   // Fetch the messages
-  return await client.fetch(unseenIds.join(","), options);
+  return await client.fetch(unseenIds.join(","), fetchOptions);
 }
 
 /**
@@ -100,13 +109,13 @@ export async function fetchMessagesFromSender(
   client: ImapClient,
   mailbox: string,
   sender: string,
-  options: ImapFetchOptions = { flags: true, envelope: true },
+  options: ImapFetchOptions = { flags: true, envelope: true, uid: true },
 ): Promise<ImapMessage[]> {
   return await searchAndFetchMessages(
     client,
     mailbox,
     { header: [{ field: "FROM", value: sender }] },
-    options,
+    { ...options, uid: true },
   );
 }
 

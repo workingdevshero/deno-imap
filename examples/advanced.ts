@@ -129,9 +129,9 @@ async function main() {
 
     // Example 8: Delete messages
     console.log("\n--- Example 8: Delete messages ---");
-    if (recentMessages.length > 0 && recentMessages.length > 5) {
-      // Delete the last 5 messages
-      const messagesToDelete = recentMessages.slice(-5);
+    if (recentMessages.length > 0 && recentMessages.length > 2) {
+      // Delete the last 2 messages
+      const messagesToDelete = recentMessages.slice(-2);
       const messageIds = messagesToDelete.map((msg) => msg.seq);
       await deleteMessages(client, "INBOX", messageIds);
       console.log(`Deleted ${messageIds.length} messages`);

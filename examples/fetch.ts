@@ -23,42 +23,6 @@ function decodeUint8Array(data: Uint8Array): string {
   return decoder.decode(data);
 }
 
-/**
- * Decodes a base64 encoded string
- * @param str Base64 encoded string
- * @returns Decoded string
- */
-export function decodeBase64(str: string): string {
-  try {
-    return new TextDecoder().decode(
-      Uint8Array.from(atob(str), (c) => c.charCodeAt(0))
-    );
-  } catch (error) {
-    console.warn("Failed to decode base64:", error);
-    return str;
-  }
-}
-
-/**
- * Decodes a quoted-printable encoded string
- * @param str Quoted-printable encoded string
- * @returns Decoded string
- */
-export function decodeQuotedPrintable(str: string): string {
-  try {
-    return str
-      .replace(/=\r\n/g, "")
-      .replace(/=([0-9A-F]{2})/g, (_, hex) => 
-        String.fromCharCode(parseInt(hex, 16))
-      );
-  } catch (error) {
-    console.warn("Failed to decode quoted-printable:", error);
-    return str;
-  }
-}
-
-
-
 // Validate required environment variables
 const requiredEnvVars = ["IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD"];
 for (const envVar of requiredEnvVars) {
