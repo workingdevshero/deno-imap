@@ -7,11 +7,11 @@ This directory contains examples demonstrating how to use the IMAP client librar
 Before running any example, create a `.env` file in the root directory with your IMAP server credentials:
 
 ```
-IMAP_HOST=your_imap_server
+IMAP_HOST="your_imap_server"
 IMAP_PORT=993
-IMAP_USERNAME=your_username
-IMAP_PASSWORD=your_password
-IMAP_USE_TLS=true
+IMAP_USERNAME="your_username"
+IMAP_PASSWORD="your_password"
+IMAP_USE_TLS="true"
 ```
 
 The `IMAP_USE_TLS` variable is optional and defaults to `true` if not specified.

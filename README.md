@@ -93,11 +93,11 @@ const client = new ImapClient({
 Create a `.env` file with your connection details:
 
 ```
-IMAP_HOST=imap.example.com
+IMAP_HOST="imap.example.com"
 IMAP_PORT=993
-IMAP_USERNAME=user@example.com
-IMAP_PASSWORD=your_password_here
-IMAP_USE_TLS=true
+IMAP_USERNAME="user@example.com"
+IMAP_PASSWORD="your_password_here"
+IMAP_USE_TLS="true"
 ```
 
 Then run your script with the `--env-file` flag:
