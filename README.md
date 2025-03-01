@@ -1,4 +1,4 @@
-# deno_imap
+# deno-imap
 
 A modern IMAP (Internet Message Access Protocol) client for Deno.
 
@@ -19,19 +19,19 @@ A modern IMAP (Internet Message Access Protocol) client for Deno.
 You can import the module directly from the JSR registry:
 
 ```typescript
-import { ImapClient } from "jsr:@username/deno_imap";
+import { ImapClient } from "jsr:@bobbyg603/deno-imap";
 ```
 
 Or import it from GitHub:
 
 ```typescript
-import { ImapClient } from "https://raw.githubusercontent.com/username/deno_imap/main/mod.ts";
+import { ImapClient } from "https://raw.githubusercontent.com/bobbyg603/deno-imap/main/mod.ts";
 ```
 
 ## Basic Usage
 
 ```typescript
-import { ImapClient } from "jsr:@username/deno_imap";
+import { ImapClient } from "jsr:@bobbyg603/deno-imap";
 
 // Create a new IMAP client
 const client = new ImapClient({
@@ -111,13 +111,13 @@ deno run --allow-net --allow-env --env-file=.env your_script.ts
 The package includes utility functions for common operations:
 
 ```typescript
-import { ImapClient } from "jsr:@username/deno_imap";
+import { ImapClient } from "jsr:@bobbyg603/deno-imap";
 import { 
   fetchUnreadMessages, 
   fetchMessagesFromSender,
   markMessagesAsRead,
   deleteMessages
-} from "jsr:@username/deno_imap/utils";
+} from "jsr:@bobbyg603/deno-imap/utils";
 
 const client = new ImapClient({
   host: "imap.example.com",
@@ -220,14 +220,26 @@ new ImapClient(options: ImapOptions)
 
 The [examples](./examples) directory contains sample code demonstrating how to use the IMAP client:
 
-- [Basic Example](./examples/basic.ts): Demonstrates connecting to an IMAP server, listing mailboxes, and fetching unread messages.
+- [Basic Example](./examples/basic.ts): Demonstrates connecting to an IMAP server, listing mailboxes, and checking the INBOX status.
+- [Search Example](./examples/search.ts): Shows how to search for messages using various criteria.
+- [Fetch Example](./examples/fetch.ts): Demonstrates how to fetch and decode message content, including handling multipart messages and different encodings.
+- [Mailboxes Example](./examples/mailboxes.ts): Shows how to manage mailboxes, including creating, renaming, and deleting them.
 - [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching message content, and manipulating messages.
 
-To run the examples, create a `.env` file with your IMAP server details (see `.env.example`), then run:
+To run the examples, create a `.env` file with your IMAP server details, then run:
 
 ```bash
 # Run the basic example
 deno run --allow-net --allow-env --env-file=.env examples/basic.ts
+
+# Run the search example
+deno run --allow-net --allow-env --env-file=.env examples/search.ts
+
+# Run the fetch example
+deno run --allow-net --allow-env --env-file=.env examples/fetch.ts
+
+# Run the mailboxes example
+deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 
 # Run the advanced example
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
