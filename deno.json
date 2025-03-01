@@ -1,5 +1,5 @@
 {
-  "name": "deno_imap",
+  "name": "@bobbyg603/deno-imap",
   "version": "0.1.0",
   "description": "A modern IMAP client for Deno",
   "tasks": {
