@@ -393,9 +393,6 @@ export function parseBodyStructure(data: string): ImapBodyStructure {
  * @returns Fetch data
  */
 export function parseFetch(lines: string[]): Record<string, unknown> {
-  // This is a simplified parser for demonstration
-  // A real implementation would use a proper IMAP parser
-  
   const result: Record<string, unknown> = {};
   
   try {
@@ -404,14 +401,11 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
     let sectionData: string[] = [];
     let inSection = false;
     
-    console.log("parseFetch: Processing", lines.length, "lines");
-    
     // First, extract the sequence number from the first line
     const firstLine = lines[0];
     const seqMatch = firstLine.match(/^\* (\d+) FETCH/i);
     if (seqMatch) {
       result.seq = parseInt(seqMatch[1], 10);
-      console.log(`parseFetch: Found message #${result.seq}`);
     }
     
     // Extract other message data from the first line
@@ -422,7 +416,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
           .filter(Boolean)
           .map(flag => flag.replace(/^\\/, "")); // Remove leading backslash
         result.flags = flags;
-        console.log(`parseFetch: Found flags: ${flags.join(', ')}`);
       }
     }
     
@@ -430,7 +423,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       const uidMatch = firstLine.match(/UID (\d+)/i);
       if (uidMatch) {
         result.uid = parseInt(uidMatch[1], 10);
-        console.log(`parseFetch: Found UID: ${result.uid}`);
       }
     }
     
@@ -438,7 +430,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       const sizeMatch = firstLine.match(/RFC822\.SIZE (\d+)/i);
       if (sizeMatch) {
         result.size = parseInt(sizeMatch[1], 10);
-        console.log(`parseFetch: Found size: ${result.size}`);
       }
     }
     
@@ -447,7 +438,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       if (dateMatch) {
         try {
           result.internalDate = new Date(dateMatch[1]);
-          console.log(`parseFetch: Found internal date: ${result.internalDate}`);
         } catch (error) {
           console.warn("Failed to parse internal date:", error);
         }
@@ -460,7 +450,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       if (envelopeMatch) {
         try {
           result.envelope = parseEnvelope(`(${envelopeMatch[1]})`);
-          console.log(`parseFetch: Found envelope, subject: ${(result.envelope as any).subject}`);
         } catch (error) {
           console.warn("Failed to parse envelope:", error);
           
@@ -483,7 +472,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       if (bodyMatch) {
         try {
           result.bodyStructure = parseBodyStructure(`(${bodyMatch[1]})`);
-          console.log(`parseFetch: Found body structure`);
         } catch (error) {
           console.warn("Failed to parse body structure:", error);
         }
@@ -491,16 +479,7 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
     }
     
     // Process each line for section data
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Debug logging
-      if (i < 3 || i >= lines.length - 3) {
-        console.log(`parseFetch line ${i}: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`);
-      } else if (i === 3 && lines.length > 6) {
-        console.log(`parseFetch: ... (${lines.length - 6} more lines) ...`);
-      }
-      
+    for (const line of lines) {
       // If we're collecting section data
       if (inSection) {
         sectionData.push(line);
@@ -508,20 +487,16 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         // Check if we've collected all the data for this section
         const collectedData = sectionData.join('\r\n');
         if (collectedData.length >= sectionSize) {
-          console.log(`parseFetch: Finished collecting section ${currentSection}, size: ${collectedData.length}/${sectionSize}`);
-          
           // Process the collected data
           if (currentSection) {
             if (currentSection === 'HEADER') {
               // Parse headers
               result.headers = parseHeaders(sectionData);
-              console.log(`parseFetch: Parsed headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
             } else if (currentSection === 'FULL') {
               // Store the full message as raw
               const textData = sectionData.join('\r\n');
               const encoder = new TextEncoder();
               result.raw = encoder.encode(textData);
-              console.log(`parseFetch: Stored raw message, size: ${textData.length}`);
               
               // Also try to extract the body
               if (!result.parts) {
@@ -539,7 +514,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
                   size: bodyText.length,
                   type: 'text/plain' // Default type
                 };
-                console.log(`parseFetch: Extracted TEXT part from raw message, size: ${bodyText.length}`);
               }
             } else {
               // Store other section data
@@ -555,7 +529,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
                 size: textData.length,
                 type: 'text/plain' // Default type
               };
-              console.log(`parseFetch: Stored section ${currentSection}, size: ${textData.length}`);
             }
           }
           
@@ -575,7 +548,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         sectionSize = parseInt(bodyContentMatch[2], 10);
         inSection = true;
         sectionData = [];
-        console.log(`parseFetch: Starting to collect section ${currentSection}, expected size: ${sectionSize}`);
         continue;
       }
       
@@ -584,12 +556,10 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       if (inlineBodyMatch) {
         const section = inlineBodyMatch[1];
         const content = inlineBodyMatch[2];
-        console.log(`parseFetch: Found inline section ${section}, size: ${content.length}`);
         
         if (section === 'HEADER') {
           // Parse headers from inline content
           result.headers = parseHeaders([content]);
-          console.log(`parseFetch: Parsed inline headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
         } else {
           // Store other section data
           if (!result.parts) {
@@ -603,7 +573,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
             size: content.length,
             type: 'text/plain' // Default type
           };
-          console.log(`parseFetch: Stored inline section ${section}`);
         }
       }
       
@@ -614,7 +583,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         currentSection = 'FULL';
         inSection = true;
         sectionData = [];
-        console.log(`parseFetch: Starting to collect full message, expected size: ${sectionSize}`);
         continue;
       }
     }
@@ -622,18 +590,15 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
     // Process any remaining section data
     if (inSection && currentSection && sectionData.length > 0) {
       const collectedData = sectionData.join('\r\n');
-      console.log(`parseFetch: Processing remaining section ${currentSection}, size: ${collectedData.length}/${sectionSize}`);
       
       if (currentSection === 'HEADER') {
         // Parse headers
         result.headers = parseHeaders(sectionData);
-        console.log(`parseFetch: Parsed remaining headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
       } else if (currentSection === 'FULL') {
         // Store the full message as raw
         const textData = sectionData.join('\r\n');
         const encoder = new TextEncoder();
         result.raw = encoder.encode(textData);
-        console.log(`parseFetch: Stored raw message, size: ${textData.length}`);
         
         // Also try to extract the body
         if (!result.parts) {
@@ -651,7 +616,6 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
             size: bodyText.length,
             type: 'text/plain' // Default type
           };
-          console.log(`parseFetch: Extracted TEXT part from raw message, size: ${bodyText.length}`);
         }
       } else {
         // Store other section data
@@ -667,11 +631,8 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
           size: textData.length,
           type: 'text/plain' // Default type
         };
-        console.log(`parseFetch: Stored remaining section ${currentSection}, size: ${textData.length}`);
       }
     }
-    
-    console.log("parseFetch: Finished processing, result keys:", Object.keys(result));
   } catch (error) {
     console.warn("Error parsing fetch response:", error);
   }
