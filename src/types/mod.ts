@@ -64,6 +64,8 @@ export interface ImapMailbox {
   recent?: number;
   /** Number of unseen messages */
   unseen?: number;
+  /** Sequence number of the first unseen message */
+  firstUnseen?: number;
   /** Next UID to be assigned */
   uidNext?: number;
   /** UID validity value */

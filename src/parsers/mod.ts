@@ -123,10 +123,12 @@ export function parseSelect(lines: string[]): Partial<ImapMailbox> {
       continue;
     }
     
-    // UNSEEN response
+    // UNSEEN response - this is the first unseen message number, not the count
     match = line.match(/^\* OK \[UNSEEN (\d+)\]/i);
     if (match) {
-      result.unseen = parseInt(match[1], 10);
+      // We'll set this temporarily, but it's not the actual unseen count
+      // The actual unseen count should be determined by a STATUS command or a SEARCH for unseen messages
+      result.firstUnseen = parseInt(match[1], 10);
       continue;
     }
     
@@ -397,55 +399,68 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   
   try {
-    for (const line of lines) {
-      // Extract the message data between parentheses
-      // Format: * 1 FETCH (FLAGS (\Seen) UID 100 ...)
-      const match = line.match(/^\* (\d+) FETCH \((.*)\)$/i);
-      if (!match) continue;
-      
-      // Store the sequence number
-      result.seq = parseInt(match[1], 10);
-      
-      const fetchData = match[2];
-      
-      // Parse FLAGS
-      const flagsMatch = fetchData.match(/FLAGS \(([^)]*)\)/i);
+    let currentSection: string | null = null;
+    let sectionSize = 0;
+    let sectionData: string[] = [];
+    let inSection = false;
+    
+    console.log("parseFetch: Processing", lines.length, "lines");
+    
+    // First, extract the sequence number from the first line
+    const firstLine = lines[0];
+    const seqMatch = firstLine.match(/^\* (\d+) FETCH/i);
+    if (seqMatch) {
+      result.seq = parseInt(seqMatch[1], 10);
+      console.log(`parseFetch: Found message #${result.seq}`);
+    }
+    
+    // Extract other message data from the first line
+    if (firstLine.includes("FLAGS")) {
+      const flagsMatch = firstLine.match(/FLAGS \(([^)]*)\)/i);
       if (flagsMatch) {
         const flags = flagsMatch[1].split(" ")
           .filter(Boolean)
           .map(flag => flag.replace(/^\\/, "")); // Remove leading backslash
         result.flags = flags;
+        console.log(`parseFetch: Found flags: ${flags.join(', ')}`);
       }
-      
-      // Parse UID
-      const uidMatch = fetchData.match(/UID (\d+)/i);
+    }
+    
+    if (firstLine.includes("UID")) {
+      const uidMatch = firstLine.match(/UID (\d+)/i);
       if (uidMatch) {
         result.uid = parseInt(uidMatch[1], 10);
+        console.log(`parseFetch: Found UID: ${result.uid}`);
       }
-      
-      // Parse RFC822.SIZE
-      const sizeMatch = fetchData.match(/RFC822\.SIZE (\d+)/i);
+    }
+    
+    if (firstLine.includes("RFC822.SIZE")) {
+      const sizeMatch = firstLine.match(/RFC822\.SIZE (\d+)/i);
       if (sizeMatch) {
         result.size = parseInt(sizeMatch[1], 10);
+        console.log(`parseFetch: Found size: ${result.size}`);
       }
-      
-      // Parse INTERNALDATE
-      const dateMatch = fetchData.match(/INTERNALDATE "([^"]+)"/i);
+    }
+    
+    if (firstLine.includes("INTERNALDATE")) {
+      const dateMatch = firstLine.match(/INTERNALDATE "([^"]+)"/i);
       if (dateMatch) {
         try {
           result.internalDate = new Date(dateMatch[1]);
+          console.log(`parseFetch: Found internal date: ${result.internalDate}`);
         } catch (error) {
           console.warn("Failed to parse internal date:", error);
         }
       }
-      
-      // Parse ENVELOPE
-      // Use a more robust regex that can handle nested parentheses
+    }
+    
+    if (firstLine.includes("ENVELOPE")) {
       const envelopeRegex = /ENVELOPE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
-      const envelopeMatch = fetchData.match(envelopeRegex);
+      const envelopeMatch = firstLine.match(envelopeRegex);
       if (envelopeMatch) {
         try {
           result.envelope = parseEnvelope(`(${envelopeMatch[1]})`);
+          console.log(`parseFetch: Found envelope, subject: ${(result.envelope as any).subject}`);
         } catch (error) {
           console.warn("Failed to parse envelope:", error);
           
@@ -460,28 +475,247 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
           };
         }
       }
-      
-      // Parse BODY or BODYSTRUCTURE
-      const bodyRegex = /BODY(?:STRUCTURE)? \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
-      const bodyMatch = fetchData.match(bodyRegex);
+    }
+    
+    if (firstLine.includes("BODYSTRUCTURE")) {
+      const bodyRegex = /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
+      const bodyMatch = firstLine.match(bodyRegex);
       if (bodyMatch) {
         try {
           result.bodyStructure = parseBodyStructure(`(${bodyMatch[1]})`);
+          console.log(`parseFetch: Found body structure`);
         } catch (error) {
           console.warn("Failed to parse body structure:", error);
         }
       }
+    }
+    
+    // Process each line for section data
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       
-      // Parse BODY[...]
-      const bodyContentMatch = fetchData.match(/BODY\[([^\]]+)\] \{(\d+)\}/i);
+      // Debug logging
+      if (i < 3 || i >= lines.length - 3) {
+        console.log(`parseFetch line ${i}: ${line.substring(0, 100)}${line.length > 100 ? '...' : ''}`);
+      } else if (i === 3 && lines.length > 6) {
+        console.log(`parseFetch: ... (${lines.length - 6} more lines) ...`);
+      }
+      
+      // If we're collecting section data
+      if (inSection) {
+        sectionData.push(line);
+        
+        // Check if we've collected all the data for this section
+        const collectedData = sectionData.join('\r\n');
+        if (collectedData.length >= sectionSize) {
+          console.log(`parseFetch: Finished collecting section ${currentSection}, size: ${collectedData.length}/${sectionSize}`);
+          
+          // Process the collected data
+          if (currentSection) {
+            if (currentSection === 'HEADER') {
+              // Parse headers
+              result.headers = parseHeaders(sectionData);
+              console.log(`parseFetch: Parsed headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
+            } else if (currentSection === 'FULL') {
+              // Store the full message as raw
+              const textData = sectionData.join('\r\n');
+              const encoder = new TextEncoder();
+              result.raw = encoder.encode(textData);
+              console.log(`parseFetch: Stored raw message, size: ${textData.length}`);
+              
+              // Also try to extract the body
+              if (!result.parts) {
+                result.parts = {};
+              }
+              
+              // Simple parsing to extract body from raw message
+              const parts = textData.split("\r\n\r\n");
+              if (parts.length > 1) {
+                // Everything after the first empty line is the body
+                const bodyText = parts.slice(1).join("\r\n\r\n");
+                const encoder = new TextEncoder();
+                (result.parts as Record<string, any>)['TEXT'] = {
+                  data: encoder.encode(bodyText),
+                  size: bodyText.length,
+                  type: 'text/plain' // Default type
+                };
+                console.log(`parseFetch: Extracted TEXT part from raw message, size: ${bodyText.length}`);
+              }
+            } else {
+              // Store other section data
+              if (!result.parts) {
+                result.parts = {};
+              }
+              
+              // Convert the array of strings to a Uint8Array
+              const textData = sectionData.join('\r\n');
+              const encoder = new TextEncoder();
+              (result.parts as Record<string, any>)[currentSection] = {
+                data: encoder.encode(textData),
+                size: textData.length,
+                type: 'text/plain' // Default type
+              };
+              console.log(`parseFetch: Stored section ${currentSection}, size: ${textData.length}`);
+            }
+          }
+          
+          // Reset section collection
+          inSection = false;
+          currentSection = null;
+          sectionData = [];
+        }
+        
+        continue;
+      }
+      
+      // Parse BODY[...] sections
+      const bodyContentMatch = line.match(/BODY\[([^\]]+)\] \{(\d+)\}/i);
       if (bodyContentMatch) {
-        const section = bodyContentMatch[1];
-        result[`body[${section}]`] = ""; // Content would be in the next line(s)
+        currentSection = bodyContentMatch[1];
+        sectionSize = parseInt(bodyContentMatch[2], 10);
+        inSection = true;
+        sectionData = [];
+        console.log(`parseFetch: Starting to collect section ${currentSection}, expected size: ${sectionSize}`);
+        continue;
+      }
+      
+      // Handle the case where the body content is on the same line (for small content)
+      const inlineBodyMatch = line.match(/BODY\[([^\]]+)\] "([^"]*)"/i);
+      if (inlineBodyMatch) {
+        const section = inlineBodyMatch[1];
+        const content = inlineBodyMatch[2];
+        console.log(`parseFetch: Found inline section ${section}, size: ${content.length}`);
+        
+        if (section === 'HEADER') {
+          // Parse headers from inline content
+          result.headers = parseHeaders([content]);
+          console.log(`parseFetch: Parsed inline headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
+        } else {
+          // Store other section data
+          if (!result.parts) {
+            result.parts = {};
+          }
+          
+          // Convert the string to a Uint8Array
+          const encoder = new TextEncoder();
+          (result.parts as Record<string, any>)[section] = {
+            data: encoder.encode(content),
+            size: content.length,
+            type: 'text/plain' // Default type
+          };
+          console.log(`parseFetch: Stored inline section ${section}`);
+        }
+      }
+      
+      // Handle full message content
+      const fullBodyMatch = line.match(/BODY\[\] \{(\d+)\}/i);
+      if (fullBodyMatch) {
+        sectionSize = parseInt(fullBodyMatch[1], 10);
+        currentSection = 'FULL';
+        inSection = true;
+        sectionData = [];
+        console.log(`parseFetch: Starting to collect full message, expected size: ${sectionSize}`);
+        continue;
       }
     }
+    
+    // Process any remaining section data
+    if (inSection && currentSection && sectionData.length > 0) {
+      const collectedData = sectionData.join('\r\n');
+      console.log(`parseFetch: Processing remaining section ${currentSection}, size: ${collectedData.length}/${sectionSize}`);
+      
+      if (currentSection === 'HEADER') {
+        // Parse headers
+        result.headers = parseHeaders(sectionData);
+        console.log(`parseFetch: Parsed remaining headers, count: ${Object.keys(result.headers as Record<string, any>).length}`);
+      } else if (currentSection === 'FULL') {
+        // Store the full message as raw
+        const textData = sectionData.join('\r\n');
+        const encoder = new TextEncoder();
+        result.raw = encoder.encode(textData);
+        console.log(`parseFetch: Stored raw message, size: ${textData.length}`);
+        
+        // Also try to extract the body
+        if (!result.parts) {
+          result.parts = {};
+        }
+        
+        // Simple parsing to extract body from raw message
+        const parts = textData.split("\r\n\r\n");
+        if (parts.length > 1) {
+          // Everything after the first empty line is the body
+          const bodyText = parts.slice(1).join("\r\n\r\n");
+          const encoder = new TextEncoder();
+          (result.parts as Record<string, any>)['TEXT'] = {
+            data: encoder.encode(bodyText),
+            size: bodyText.length,
+            type: 'text/plain' // Default type
+          };
+          console.log(`parseFetch: Extracted TEXT part from raw message, size: ${bodyText.length}`);
+        }
+      } else {
+        // Store other section data
+        if (!result.parts) {
+          result.parts = {};
+        }
+        
+        // Convert the array of strings to a Uint8Array
+        const textData = sectionData.join('\r\n');
+        const encoder = new TextEncoder();
+        (result.parts as Record<string, any>)[currentSection] = {
+          data: encoder.encode(textData),
+          size: textData.length,
+          type: 'text/plain' // Default type
+        };
+        console.log(`parseFetch: Stored remaining section ${currentSection}, size: ${textData.length}`);
+      }
+    }
+    
+    console.log("parseFetch: Finished processing, result keys:", Object.keys(result));
   } catch (error) {
     console.warn("Error parsing fetch response:", error);
   }
   
   return result;
+}
+
+/**
+ * Parse email headers from an array of header lines
+ * @param headerLines Array of header lines
+ * @returns Object with header names as keys and values as values
+ */
+function parseHeaders(headerLines: string[]): Record<string, string | string[]> {
+  const headers: Record<string, string | string[]> = {};
+  let currentHeader = '';
+  let currentValue = '';
+  
+  // Join all lines with proper line breaks
+  const headerText = headerLines.join('\r\n');
+  
+  // Split into individual header entries
+  const headerEntries = headerText.split(/\r\n(?!\s)/);
+  
+  for (const entry of headerEntries) {
+    if (!entry.trim()) continue;
+    
+    // Check if this is a new header or continuation
+    const match = entry.match(/^([^:]+):\s*(.*(?:\r\n\s+.*)*)/);
+    if (match) {
+      const name = match[1].trim();
+      const value = match[2].replace(/\r\n\s+/g, ' ').trim();
+      
+      // Some headers can appear multiple times
+      if (headers[name]) {
+        if (Array.isArray(headers[name])) {
+          (headers[name] as string[]).push(value);
+        } else {
+          headers[name] = [headers[name] as string, value];
+        }
+      } else {
+        headers[name] = value;
+      }
+    }
+  }
+  
+  return headers;
 } 

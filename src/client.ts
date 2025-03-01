@@ -314,6 +314,16 @@ export class ImapClient {
     const response = await this.executeCommand(commands.select(mailbox));
     const mailboxInfo = parsers.parseSelect(response);
     
+    // Get the actual unseen count using STATUS command
+    try {
+      const status = await this.getMailboxStatus(mailbox, ["UNSEEN"]);
+      if (status.unseen !== undefined) {
+        mailboxInfo.unseen = status.unseen;
+      }
+    } catch (error) {
+      console.warn("Failed to get unseen count:", error);
+    }
+    
     this._selectedMailbox = {
       name: mailbox,
       flags: mailboxInfo.flags || [],
@@ -525,41 +535,83 @@ export class ImapClient {
     
     // Parse the fetch response
     const messages: ImapMessage[] = [];
-    let currentMessage: Partial<ImapMessage> | null = null;
+    
+    // Group the response lines by message
+    const messageGroups: string[][] = [];
+    let currentGroup: string[] = [];
+    let inLiteral = false;
+    let literalSize = 0;
+    let literalCollected = 0;
     
     for (const line of response) {
       // Check if this is the start of a new message
       // Format: * 1 FETCH (...)
       const fetchMatch = line.match(/^\* (\d+) FETCH/i);
-      if (fetchMatch) {
-        // If we were parsing a message, add it to the list
-        if (currentMessage && currentMessage.seq) {
-          messages.push(currentMessage as ImapMessage);
+      
+      if (fetchMatch && !inLiteral) {
+        // If we were collecting lines for a message, add them to the groups
+        if (currentGroup.length > 0) {
+          messageGroups.push(currentGroup);
+          currentGroup = [];
         }
         
-        // Start a new message
-        currentMessage = {
-          seq: parseInt(fetchMatch[1], 10),
-          flags: [],
-        };
+        // Start a new group
+        currentGroup.push(line);
         
-        // Parse the message data
-        try {
-          const messageData = parsers.parseFetch([line]);
+        // Check if this line contains a literal string
+        const literalMatch = line.match(/\{(\d+)\}$/);
+        if (literalMatch) {
+          inLiteral = true;
+          literalSize = parseInt(literalMatch[1], 10);
+          literalCollected = 0;
+        }
+      } else {
+        // Add the line to the current group
+        currentGroup.push(line);
+        
+        // If we're collecting a literal, update the count
+        if (inLiteral) {
+          literalCollected += line.length + 2; // +2 for CRLF
           
-          // Add the parsed data to the current message
-          if (messageData) {
-            currentMessage = { ...currentMessage, ...messageData };
+          // Check if we've collected the entire literal
+          if (literalCollected >= literalSize) {
+            inLiteral = false;
           }
-        } catch (error) {
-          console.warn("Failed to parse FETCH response:", error);
         }
       }
     }
     
-    // Add the last message if we were parsing one
-    if (currentMessage && currentMessage.seq) {
-      messages.push(currentMessage as ImapMessage);
+    // Add the last group if it's not empty
+    if (currentGroup.length > 0) {
+      messageGroups.push(currentGroup);
+    }
+    
+    // Parse each message group
+    for (const group of messageGroups) {
+      try {
+        const messageData = parsers.parseFetch(group);
+        
+        if (messageData && messageData.seq) {
+          // Create a message object with the parsed data
+          const message: ImapMessage = {
+            seq: messageData.seq as number,
+            flags: (messageData.flags as string[]) || [],
+            uid: messageData.uid as number,
+            size: messageData.size as number,
+            internalDate: messageData.internalDate as Date,
+            envelope: messageData.envelope as any,
+            bodyStructure: messageData.bodyStructure as any,
+            headers: messageData.headers as any,
+            parts: messageData.parts as any,
+            raw: messageData.raw as Uint8Array,
+          };
+          
+          // Add the message to the list
+          messages.push(message);
+        }
+      } catch (error) {
+        console.warn("Failed to parse FETCH response:", error);
+      }
     }
     
     return messages;

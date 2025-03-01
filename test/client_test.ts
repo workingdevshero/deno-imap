@@ -177,6 +177,20 @@ function createMockClient(): ImapClient {
     const result = (this as any)._parsers.parseSelect(mockResponses.select);
     result.name = mailbox;
     
+    // Get the unseen count from the STATUS response
+    for (const line of mockResponses.status) {
+      if (line.startsWith("* STATUS")) {
+        try {
+          const status = (this as any)._parsers.parseStatus(line);
+          if (status.unseen !== undefined) {
+            result.unseen = status.unseen;
+          }
+        } catch (error) {
+          console.warn("Failed to parse STATUS response:", error);
+        }
+      }
+    }
+    
     // Set the selected mailbox
     (this as any)._selectedMailbox = result;
     
@@ -375,10 +389,11 @@ function createMockClient(): ImapClient {
           continue;
         }
         
-        // UNSEEN response
+        // UNSEEN response - this is the first unseen message number, not the count
         match = line.match(/^\* OK \[UNSEEN (\d+)\]/i);
         if (match) {
-          result.unseen = parseInt(match[1], 10);
+          // This is the sequence number of the first unseen message
+          result.firstUnseen = parseInt(match[1], 10);
           continue;
         }
         
@@ -515,7 +530,8 @@ Deno.test("ImapClient - Test 4: Select mailbox", async () => {
   const mailbox = await client.selectMailbox("INBOX");
   assertEquals(mailbox.exists, 3);
   assertEquals(mailbox.recent, 0);
-  assertEquals(mailbox.unseen, 3);
+  assertEquals(mailbox.unseen, 1);
+  assertEquals(mailbox.firstUnseen, 3);
   assertEquals(mailbox.uidNext, 4);
   assertEquals(mailbox.uidValidity, 1740855787);
   
