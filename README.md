@@ -114,13 +114,13 @@ deno run --allow-net --allow-env --env-file=.env your_script.ts
 The package includes utility functions for common operations:
 
 ```typescript
-import { ImapClient } from "jsr:@bobbyg603/deno-imap";
 import { 
+  ImapClient,
   fetchUnreadMessages, 
   fetchMessagesFromSender,
   markMessagesAsRead,
   deleteMessages
-} from "jsr:@bobbyg603/deno-imap/utils";
+} from "jsr:@bobbyg603/deno-imap";
 
 const client = new ImapClient({
   host: "imap.example.com",

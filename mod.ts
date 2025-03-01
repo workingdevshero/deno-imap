@@ -12,6 +12,23 @@ export { ImapClient } from "./src/client.ts";
 export { ImapConnection } from "./src/connection.ts";
 export { ImapError, ImapAuthError, ImapCommandError } from "./src/errors.ts";
 
+// Export utility functions
+export {
+  fetchAllMessages,
+  searchAndFetchMessages,
+  fetchUnreadMessages,
+  fetchMessagesFromSender,
+  fetchMessagesWithSubject,
+  fetchMessagesSince,
+  fetchMessagesWithAttachments,
+  markMessagesAsRead,
+  markMessagesAsUnread,
+  deleteMessages,
+  moveMessages,
+  createMailboxHierarchy,
+  getMailboxHierarchy,
+} from "./src/utils/mod.ts";
+
 // Re-export types
 export type {
   ImapOptions,
