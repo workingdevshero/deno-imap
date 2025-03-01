@@ -58,8 +58,11 @@ console.log("INBOX has", inbox.exists, "messages");
 const unreadMessages = await client.search({ flags: { has: ["\\Unseen"] } });
 console.log("Unread message IDs:", unreadMessages);
 
-// Fetch messages
-const messages = await client.fetch("1:10", { 
+// Fetch messages (safely handling mailboxes with fewer than 10 messages)
+const messageCount = inbox.exists || 0;
+const fetchRange = messageCount > 0 ? `1:${Math.min(messageCount, 10)}` : "1";
+
+const messages = await client.fetch(fetchRange, { 
   envelope: true, 
   headers: ["Subject", "From", "Date"] 
 });
