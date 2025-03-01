@@ -50,6 +50,18 @@ The mailboxes example demonstrates how to manage mailboxes, including listing, c
 deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 ```
 
+### List Recent Messages
+
+The list recent messages example demonstrates how to list and display the most recent message from each non-standard mailbox in your IMAP account. It shows how to:
+- Filter out standard mailboxes (INBOX, Trash, Spam, etc.)
+- Fetch envelope information (sender, recipient, subject, date)
+- Handle and decode message content (both plain text and HTML)
+- Process multipart messages
+
+```bash
+deno run --allow-net --allow-env --env-file=.env examples/list_recent.ts
+```
+
 ## Notes
 
 - All examples include proper error handling and ensure the connection is closed properly.

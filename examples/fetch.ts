@@ -14,6 +14,8 @@
  */
 
 import { ImapClient } from "../mod.ts";
+import { getContentInfo } from './utils/headers.ts';
+import { decodeBody, parseMultipartMessage } from './utils/body.ts';
 
 // Helper function to decode Uint8Array to string
 function decodeUint8Array(data: Uint8Array): string {
@@ -26,7 +28,7 @@ function decodeUint8Array(data: Uint8Array): string {
  * @param str Base64 encoded string
  * @returns Decoded string
  */
-function decodeBase64(str: string): string {
+export function decodeBase64(str: string): string {
   try {
     return new TextDecoder().decode(
       Uint8Array.from(atob(str), (c) => c.charCodeAt(0))
@@ -42,7 +44,7 @@ function decodeBase64(str: string): string {
  * @param str Quoted-printable encoded string
  * @returns Decoded string
  */
-function decodeQuotedPrintable(str: string): string {
+export function decodeQuotedPrintable(str: string): string {
   try {
     return str
       .replace(/=\r\n/g, "")
@@ -55,120 +57,7 @@ function decodeQuotedPrintable(str: string): string {
   }
 }
 
-/**
- * Decodes message body based on Content-Transfer-Encoding
- * @param body Message body as string
- * @param encoding Content-Transfer-Encoding value
- * @returns Decoded message body
- */
-function decodeBody(body: string, encoding?: string): string {
-  if (!encoding) return body;
-  
-  switch (encoding.toLowerCase()) {
-    case "base64":
-      return decodeBase64(body);
-    case "quoted-printable":
-      return decodeQuotedPrintable(body);
-    case "7bit":
-    case "8bit":
-    case "binary":
-    default:
-      return body;
-  }
-}
 
-/**
- * Extracts content type and encoding from headers
- * @param headers Message headers
- * @returns Object with contentType and encoding
- */
-function getContentInfo(headers: Record<string, string | string[]>): { contentType: string; encoding: string; boundary?: string } {
-  let contentType = "text/plain";
-  let encoding = "7bit";
-  let boundary;
-  
-  if (headers["Content-Type"]) {
-    const ctHeader = Array.isArray(headers["Content-Type"]) 
-      ? headers["Content-Type"][0] 
-      : headers["Content-Type"];
-    
-    const ctMatch = ctHeader.match(/^([^;]+)/);
-    if (ctMatch) contentType = ctMatch[1].trim().toLowerCase();
-    
-    // Extract boundary for multipart messages
-    const boundaryMatch = ctHeader.match(/boundary="?([^";\s]+)"?/i);
-    if (boundaryMatch) boundary = boundaryMatch[1];
-  }
-  
-  if (headers["Content-Transfer-Encoding"]) {
-    const cteHeader = Array.isArray(headers["Content-Transfer-Encoding"]) 
-      ? headers["Content-Transfer-Encoding"][0] 
-      : headers["Content-Transfer-Encoding"];
-    
-    encoding = cteHeader.trim().toLowerCase();
-  }
-  
-  return { contentType, encoding, boundary };
-}
-
-/**
- * Parses a multipart message and returns the text content
- * @param body Message body
- * @param boundary Boundary string
- * @returns Parsed text content
- */
-function parseMultipartMessage(body: string, boundary: string): string {
-  // Split the body into parts using the boundary
-  const parts = body.split(`--${boundary}`);
-  let textContent = "";
-  let htmlContent = "";
-  
-  // Process each part
-  for (const part of parts) {
-    if (!part.trim() || part.includes("--")) continue;
-    
-    // Split headers and content
-    const [headersText, ...contentParts] = part.split("\r\n\r\n");
-    if (!contentParts.length) continue;
-    
-    const content = contentParts.join("\r\n\r\n");
-    const headers: Record<string, string> = {};
-    
-    // Parse headers
-    const headerLines = headersText.split("\r\n");
-    for (const line of headerLines) {
-      if (!line.trim()) continue;
-      
-      const match = line.match(/^([^:]+):\s*(.*)/);
-      if (match) {
-        headers[match[1]] = match[2];
-      }
-    }
-    
-    // Get content type and encoding
-    const contentType = headers["Content-Type"] || "text/plain";
-    const encoding = headers["Content-Transfer-Encoding"] || "7bit";
-    
-    // Decode content based on encoding
-    const decodedContent = decodeBody(content, encoding);
-    
-    // Store content based on type
-    if (contentType.includes("text/plain")) {
-      textContent = decodedContent;
-    } else if (contentType.includes("text/html")) {
-      htmlContent = decodedContent;
-    }
-  }
-  
-  // Prefer plain text if available, otherwise use HTML with tags stripped
-  if (textContent) {
-    return textContent;
-  } else if (htmlContent) {
-    return htmlContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  
-  return "No readable content found in the message.";
-}
 
 // Validate required environment variables
 const requiredEnvVars = ["IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD"];

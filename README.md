@@ -225,6 +225,7 @@ The [examples](./examples) directory contains sample code demonstrating how to u
 - [Fetch Example](./examples/fetch.ts): Demonstrates how to fetch and decode message content, including handling multipart messages and different encodings.
 - [Mailboxes Example](./examples/mailboxes.ts): Shows how to manage mailboxes, including creating, renaming, and deleting them.
 - [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching message content, and manipulating messages.
+- [List Recent Example](./examples/list_recent.ts): Demonstrates how to list and display the most recent message from each non-standard mailbox, including envelope information and message content.
 
 To run the examples, create a `.env` file with your IMAP server details, then run:
 
@@ -243,6 +244,9 @@ deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 
 # Run the advanced example
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
+
+# Run the list recent messages example
+deno run --allow-net --allow-env --env-file=.env examples/list_recent.ts
 ```
 
 ## License
