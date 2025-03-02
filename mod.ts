@@ -1,5 +1,5 @@
 /**
- * @bobbyg603/deno-imap - A modern IMAP client for Deno
+ * @workingdevshero/deno-imap - A heroic IMAP client for Deno
  * 
  * This module provides a complete implementation of the IMAP protocol
  * (Internet Message Access Protocol) for Deno, allowing developers to

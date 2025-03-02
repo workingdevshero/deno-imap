@@ -1,7 +1,7 @@
 {
-  "name": "@bobbyg603/deno-imap",
-  "version": "0.2.1",
-  "description": "A modern IMAP client for Deno",
+  "name": "@workingdevshero/deno-imap",
+  "version": "0.2.2",
+  "description": "A heroic IMAP client for Deno",
   "tasks": {
     "dev": "deno run --watch mod.ts",
     "test": "deno test --allow-net",

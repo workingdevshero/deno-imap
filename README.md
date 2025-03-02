@@ -2,7 +2,7 @@
 
 # deno-imap
 
-A modern IMAP (Internet Message Access Protocol) client for Deno.
+A heroic IMAP (Internet Message Access Protocol) client for Deno.
 
 ## Features
 
@@ -21,19 +21,19 @@ A modern IMAP (Internet Message Access Protocol) client for Deno.
 You can import the module directly from the JSR registry:
 
 ```typescript
-import { ImapClient } from "jsr:@bobbyg603/deno-imap";
+import { ImapClient } from "jsr:@workingdevshero/deno-imap";
 ```
 
 Or import it from GitHub:
 
 ```typescript
-import { ImapClient } from "https://raw.githubusercontent.com/bobbyg603/deno-imap/main/mod.ts";
+import { ImapClient } from "https://raw.githubusercontent.com/workingdevshero/deno-imap/main/mod.ts";
 ```
 
 ## Basic Usage
 
 ```typescript
-import { ImapClient } from "jsr:@bobbyg603/deno-imap";
+import { ImapClient } from "jsr:@workingdevshero/deno-imap";
 
 // Create a new IMAP client
 const client = new ImapClient({
@@ -122,7 +122,7 @@ import {
   fetchMessagesFromSender,
   markMessagesAsRead,
   deleteMessages
-} from "jsr:@bobbyg603/deno-imap";
+} from "jsr:@workingdevshero/deno-imap";
 
 const client = new ImapClient({
   host: "imap.example.com",
