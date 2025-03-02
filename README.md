@@ -1,3 +1,5 @@
+![deno-imap](https://github.com/user-attachments/assets/7b2e53ac-4b29-4070-a72d-8c23e8d0ac47)
+
 # deno-imap
 
 A modern IMAP (Internet Message Access Protocol) client for Deno.
