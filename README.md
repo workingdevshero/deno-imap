@@ -1,4 +1,4 @@
-![deno-imap](https://github.com/user-attachments/assets/7b2e53ac-4b29-4070-a72d-8c23e8d0ac47)
+![heroic email delivery](https://github.com/user-attachments/assets/225be12e-9bf9-4faa-a4f2-2f7719fb5254)
 
 # deno-imap
 
