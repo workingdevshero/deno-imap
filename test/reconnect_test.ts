@@ -370,10 +370,7 @@ Deno.test("ImapClient - Retry command after successful reconnection", () => {
     reconnectCalled = true;
     return Promise.resolve();
   };
-  
-  // Override the isConnected method
-  (client as any).isConnected = () => true;
-  
+
   // Call listMailboxes which uses executeCommand internally
   client.listMailboxes();
   
