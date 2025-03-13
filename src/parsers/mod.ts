@@ -1,12 +1,12 @@
 /**
  * IMAP Response Parsers
- * 
+ *
  * This module contains parsers for IMAP server responses.
  * @module
  */
 
-import { ImapParseError } from "../errors.ts";
-import { ImapAddress, ImapBodyStructure, ImapEnvelope, ImapMailbox } from "../types/mod.ts";
+import { ImapParseError } from '../errors.ts';
+import { ImapAddress, ImapBodyStructure, ImapEnvelope, ImapMailbox } from '../types/mod.ts';
 
 /**
  * Parses a capability response
@@ -16,12 +16,12 @@ import { ImapAddress, ImapBodyStructure, ImapEnvelope, ImapMailbox } from "../ty
 export function parseCapabilities(line: string): string[] {
   // Format: * CAPABILITY IMAP4rev1 STARTTLS AUTH=PLAIN ...
   const match = line.match(/^\* CAPABILITY (.+)$/i);
-  
+
   if (!match) {
-    throw new ImapParseError("Invalid capability response", line);
+    throw new ImapParseError('Invalid capability response', line);
   }
-  
-  return match[1].split(" ");
+
+  return match[1].split(' ');
 }
 
 /**
@@ -32,24 +32,24 @@ export function parseCapabilities(line: string): string[] {
 export function parseListResponse(line: string): ImapMailbox {
   // Format: * LIST (\HasNoChildren) "/" "INBOX"
   const match = line.match(/^\* LIST \((.*?)\) "(.+?)" (.+)$/i);
-  
+
   if (!match) {
-    throw new ImapParseError("Invalid list response", line);
+    throw new ImapParseError('Invalid list response', line);
   }
-  
-  const flags = match[1].split(" ").filter(Boolean).map((flag) => {
+
+  const flags = match[1].split(' ').filter(Boolean).map((flag) => {
     // Remove backslashes and quotes
-    return flag.replace(/^\\/, "").replace(/^"(.*)"$/, "$1");
+    return flag.replace(/^\\/, '').replace(/^"(.*)"$/, '$1');
   });
-  
+
   const delimiter = match[2];
   let name = match[3];
-  
+
   // If name is quoted, remove quotes
   if (name.startsWith('"') && name.endsWith('"')) {
     name = name.substring(1, name.length - 1);
   }
-  
+
   return {
     name,
     flags,
@@ -65,38 +65,38 @@ export function parseListResponse(line: string): ImapMailbox {
 export function parseStatus(line: string): Partial<ImapMailbox> {
   // Format: * STATUS "INBOX" (MESSAGES 231 UNSEEN 5 UIDNEXT 44292 UIDVALIDITY 1)
   const match = line.match(/^\* STATUS "?([^"]+)"? \((.*)\)$/i);
-  
+
   if (!match) {
-    throw new ImapParseError("Invalid status response", line);
+    throw new ImapParseError('Invalid status response', line);
   }
-  
+
   const name = match[1];
-  const statusItems = match[2].split(" ");
+  const statusItems = match[2].split(' ');
   const result: Partial<ImapMailbox> = { name };
-  
+
   for (let i = 0; i < statusItems.length; i += 2) {
     const key = statusItems[i].toLowerCase();
     const value = parseInt(statusItems[i + 1], 10);
-    
+
     switch (key) {
-      case "messages":
+      case 'messages':
         result.exists = value;
         break;
-      case "recent":
+      case 'recent':
         result.recent = value;
         break;
-      case "unseen":
+      case 'unseen':
         result.unseen = value;
         break;
-      case "uidnext":
+      case 'uidnext':
         result.uidNext = value;
         break;
-      case "uidvalidity":
+      case 'uidvalidity':
         result.uidValidity = value;
         break;
     }
   }
-  
+
   return result;
 }
 
@@ -107,7 +107,7 @@ export function parseStatus(line: string): Partial<ImapMailbox> {
  */
 export function parseSelect(lines: string[]): Partial<ImapMailbox> {
   const result: Partial<ImapMailbox> = {};
-  
+
   for (const line of lines) {
     // EXISTS response
     let match = line.match(/^\* (\d+) EXISTS$/i);
@@ -115,14 +115,14 @@ export function parseSelect(lines: string[]): Partial<ImapMailbox> {
       result.exists = parseInt(match[1], 10);
       continue;
     }
-    
+
     // RECENT response
     match = line.match(/^\* (\d+) RECENT$/i);
     if (match) {
       result.recent = parseInt(match[1], 10);
       continue;
     }
-    
+
     // UNSEEN response - this is the first unseen message number, not the count
     match = line.match(/^\* OK \[UNSEEN (\d+)\]/i);
     if (match) {
@@ -131,29 +131,29 @@ export function parseSelect(lines: string[]): Partial<ImapMailbox> {
       result.firstUnseen = parseInt(match[1], 10);
       continue;
     }
-    
+
     // UIDNEXT response
     match = line.match(/^\* OK \[UIDNEXT (\d+)\]/i);
     if (match) {
       result.uidNext = parseInt(match[1], 10);
       continue;
     }
-    
+
     // UIDVALIDITY response
     match = line.match(/^\* OK \[UIDVALIDITY (\d+)\]/i);
     if (match) {
       result.uidValidity = parseInt(match[1], 10);
       continue;
     }
-    
+
     // FLAGS response
     match = line.match(/^\* FLAGS \((.*)\)$/i);
     if (match) {
-      result.flags = match[1].split(" ").filter(Boolean);
+      result.flags = match[1].split(' ').filter(Boolean);
       continue;
     }
   }
-  
+
   return result;
 }
 
@@ -165,14 +165,14 @@ export function parseSelect(lines: string[]): Partial<ImapMailbox> {
 export function parseSearch(line: string): number[] {
   // Format: * SEARCH 1 2 3 4 5
   const match = line.match(/^\* SEARCH(.*)$/i);
-  
+
   if (!match) {
-    throw new ImapParseError("Invalid search response", line);
+    throw new ImapParseError('Invalid search response', line);
   }
-  
+
   return match[1]
     .trim()
-    .split(" ")
+    .split(' ')
     .filter(Boolean)
     .map((num) => parseInt(num, 10));
 }
@@ -185,24 +185,24 @@ export function parseSearch(line: string): number[] {
 function parseAddressList(data: string): ImapAddress[] {
   // Format: ((name adl mailbox host) (name adl mailbox host) ...)
   const addresses: ImapAddress[] = [];
-  
+
   try {
     // IMAP addresses are in the format: ((name adl mailbox host) (name adl mailbox host) ...)
     // First, let's extract each address group (each enclosed in parentheses)
-    
+
     // Simple approach for a single address
     if (data.startsWith('((') && data.endsWith('))')) {
       // Extract the inner content
       const innerContent = data.substring(2, data.length - 2);
-      
+
       // Split by space, but handle quoted strings
       const parts: string[] = [];
       let currentPart = '';
       let inQuote = false;
-      
+
       for (let i = 0; i < innerContent.length; i++) {
         const char = innerContent[i];
-        
+
         if (char === '"' && (i === 0 || innerContent[i - 1] !== '\\')) {
           inQuote = !inQuote;
           currentPart += char;
@@ -215,13 +215,13 @@ function parseAddressList(data: string): ImapAddress[] {
           currentPart += char;
         }
       }
-      
+
       if (currentPart) {
         parts.push(currentPart);
       }
-      
+
       // Clean up the parts
-      const cleanParts = parts.map(part => {
+      const cleanParts = parts.map((part) => {
         if (part === 'NIL') return undefined;
         // Remove surrounding quotes if present
         if (part.startsWith('"') && part.endsWith('"')) {
@@ -229,42 +229,42 @@ function parseAddressList(data: string): ImapAddress[] {
         }
         return part;
       });
-      
+
       // Create the address object
       if (cleanParts.length >= 4) {
         const address: ImapAddress = {
           name: cleanParts[0],
           sourceRoute: cleanParts[1],
           mailbox: cleanParts[2],
-          host: cleanParts[3]
+          host: cleanParts[3],
         };
-        
+
         addresses.push(address);
       }
     } else {
       // Fallback to a more general approach for multiple addresses
-      console.warn("Using fallback address parsing for:", data);
-      
+      console.warn('Using fallback address parsing for:', data);
+
       // Extract email parts using a simple heuristic
       const emailMatch = data.match(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
       if (emailMatch) {
         addresses.push({
           mailbox: emailMatch[1],
-          host: emailMatch[2]
+          host: emailMatch[2],
         });
       }
     }
   } catch (error) {
-    console.warn("Error parsing address list:", error);
-    
+    console.warn('Error parsing address list:', error);
+
     // Add a fallback address if parsing fails
     addresses.push({
-      name: "Unknown",
-      mailbox: "unknown",
-      host: "example.com"
+      name: 'Unknown',
+      mailbox: 'unknown',
+      host: 'example.com',
     });
   }
-  
+
   return addresses;
 }
 
@@ -276,56 +276,56 @@ function parseAddressList(data: string): ImapAddress[] {
 export function parseEnvelope(data: string): ImapEnvelope {
   // Format: (date subject (from) (sender) (reply-to) (to) (cc) (bcc) in-reply-to message-id)
   const envelope: ImapEnvelope = {};
-  
+
   try {
     // Extract the parts between the outer parentheses
     const match = data.match(/^\((.*)\)$/);
-    
+
     if (!match) {
-      throw new ImapParseError("Invalid envelope format", data);
+      throw new ImapParseError('Invalid envelope format', data);
     }
-    
+
     // Split the envelope data into its components
     // This is a simplified approach - a real implementation would use a proper IMAP parser
     const parts = parseListItems(match[1]);
-    
+
     if (parts.length >= 10) {
       // Remove quotes from string values
       const cleanString = (str: string): string | undefined => {
-        if (str === "NIL") return undefined;
+        if (str === 'NIL') return undefined;
         // Remove surrounding quotes if present
         if (str.startsWith('"') && str.endsWith('"')) {
           return str.substring(1, str.length - 1);
         }
         return str;
       };
-      
+
       envelope.date = cleanString(parts[0]);
       envelope.subject = cleanString(parts[1]);
-      
+
       // Parse address lists
-      if (parts[2] !== "NIL") envelope.from = parseAddressList(parts[2]);
-      if (parts[3] !== "NIL") envelope.sender = parseAddressList(parts[3]);
-      if (parts[4] !== "NIL") envelope.replyTo = parseAddressList(parts[4]);
-      if (parts[5] !== "NIL") envelope.to = parseAddressList(parts[5]);
-      if (parts[6] !== "NIL") envelope.cc = parseAddressList(parts[6]);
-      if (parts[7] !== "NIL") envelope.bcc = parseAddressList(parts[7]);
-      
+      if (parts[2] !== 'NIL') envelope.from = parseAddressList(parts[2]);
+      if (parts[3] !== 'NIL') envelope.sender = parseAddressList(parts[3]);
+      if (parts[4] !== 'NIL') envelope.replyTo = parseAddressList(parts[4]);
+      if (parts[5] !== 'NIL') envelope.to = parseAddressList(parts[5]);
+      if (parts[6] !== 'NIL') envelope.cc = parseAddressList(parts[6]);
+      if (parts[7] !== 'NIL') envelope.bcc = parseAddressList(parts[7]);
+
       envelope.inReplyTo = cleanString(parts[8]);
       envelope.messageId = cleanString(parts[9]);
     }
   } catch (error) {
-    console.warn("Error parsing envelope:", error);
-    
+    console.warn('Error parsing envelope:', error);
+
     // Provide a fallback with basic information
-    envelope.subject = "Subject parsing failed";
+    envelope.subject = 'Subject parsing failed';
     envelope.from = [{
-      name: "Unknown Sender",
-      mailbox: "unknown",
-      host: "example.com"
+      name: 'Unknown Sender',
+      mailbox: 'unknown',
+      host: 'example.com',
     }];
   }
-  
+
   return envelope;
 }
 
@@ -336,36 +336,36 @@ export function parseEnvelope(data: string): ImapEnvelope {
  */
 function parseListItems(data: string): string[] {
   const result: string[] = [];
-  let current = "";
+  let current = '';
   let inQuote = false;
   let inParentheses = 0;
-  
+
   for (let i = 0; i < data.length; i++) {
     const char = data[i];
-    
-    if (char === '"' && data[i - 1] !== "\\") {
+
+    if (char === '"' && data[i - 1] !== '\\') {
       inQuote = !inQuote;
       current += char;
-    } else if (char === "(" && !inQuote) {
+    } else if (char === '(' && !inQuote) {
       inParentheses++;
       current += char;
-    } else if (char === ")" && !inQuote) {
+    } else if (char === ')' && !inQuote) {
       inParentheses--;
       current += char;
-    } else if (char === " " && !inQuote && inParentheses === 0) {
+    } else if (char === ' ' && !inQuote && inParentheses === 0) {
       if (current) {
         result.push(current);
-        current = "";
+        current = '';
       }
     } else {
       current += char;
     }
   }
-  
+
   if (current) {
     result.push(current);
   }
-  
+
   return result;
 }
 
@@ -377,12 +377,12 @@ function parseListItems(data: string): string[] {
 export function parseBodyStructure(data: string): ImapBodyStructure {
   // This is a placeholder for a complex parser
   // A real implementation would use a proper IMAP parser
-  
+
   return {
-    type: "text",
-    subtype: "plain",
+    type: 'text',
+    subtype: 'plain',
     parameters: {},
-    encoding: "7BIT",
+    encoding: '7BIT',
     size: 0,
   };
 }
@@ -394,96 +394,96 @@ export function parseBodyStructure(data: string): ImapBodyStructure {
  */
 export function parseFetch(lines: string[]): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  
+
   try {
     let currentSection: string | null = null;
     let sectionSize = 0;
     let sectionData: string[] = [];
     let inSection = false;
-    
+
     // First, extract the sequence number from the first line
     const firstLine = lines[0];
     const seqMatch = firstLine.match(/^\* (\d+) FETCH/i);
     if (seqMatch) {
       result.seq = parseInt(seqMatch[1], 10);
     }
-    
+
     // Extract other message data from the first line
-    if (firstLine.includes("FLAGS")) {
+    if (firstLine.includes('FLAGS')) {
       const flagsMatch = firstLine.match(/FLAGS \(([^)]*)\)/i);
       if (flagsMatch) {
-        const flags = flagsMatch[1].split(" ")
+        const flags = flagsMatch[1].split(' ')
           .filter(Boolean)
-          .map(flag => flag.replace(/^\\/, "")); // Remove leading backslash
+          .map((flag) => flag.replace(/^\\/, '')); // Remove leading backslash
         result.flags = flags;
       }
     }
-    
-    if (firstLine.includes("UID")) {
+
+    if (firstLine.includes('UID')) {
       const uidMatch = firstLine.match(/UID (\d+)/i);
       if (uidMatch) {
         result.uid = parseInt(uidMatch[1], 10);
       }
     }
-    
-    if (firstLine.includes("RFC822.SIZE")) {
+
+    if (firstLine.includes('RFC822.SIZE')) {
       const sizeMatch = firstLine.match(/RFC822\.SIZE (\d+)/i);
       if (sizeMatch) {
         result.size = parseInt(sizeMatch[1], 10);
       }
     }
-    
-    if (firstLine.includes("INTERNALDATE")) {
+
+    if (firstLine.includes('INTERNALDATE')) {
       const dateMatch = firstLine.match(/INTERNALDATE "([^"]+)"/i);
       if (dateMatch) {
         try {
           result.internalDate = new Date(dateMatch[1]);
         } catch (error) {
-          console.warn("Failed to parse internal date:", error);
+          console.warn('Failed to parse internal date:', error);
         }
       }
     }
-    
-    if (firstLine.includes("ENVELOPE")) {
+
+    if (firstLine.includes('ENVELOPE')) {
       const envelopeRegex = /ENVELOPE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
       const envelopeMatch = firstLine.match(envelopeRegex);
       if (envelopeMatch) {
         try {
           result.envelope = parseEnvelope(`(${envelopeMatch[1]})`);
         } catch (error) {
-          console.warn("Failed to parse envelope:", error);
-          
+          console.warn('Failed to parse envelope:', error);
+
           // Provide a fallback with basic information
           result.envelope = {
-            subject: "Subject parsing failed",
+            subject: 'Subject parsing failed',
             from: [{
-              name: "Unknown Sender",
-              mailbox: "unknown",
-              host: "example.com"
-            }]
+              name: 'Unknown Sender',
+              mailbox: 'unknown',
+              host: 'example.com',
+            }],
           };
         }
       }
     }
-    
-    if (firstLine.includes("BODYSTRUCTURE")) {
+
+    if (firstLine.includes('BODYSTRUCTURE')) {
       const bodyRegex = /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
       const bodyMatch = firstLine.match(bodyRegex);
       if (bodyMatch) {
         try {
           result.bodyStructure = parseBodyStructure(`(${bodyMatch[1]})`);
         } catch (error) {
-          console.warn("Failed to parse body structure:", error);
+          console.warn('Failed to parse body structure:', error);
         }
       }
     }
-    
+
     // Process each line for section data
     for (const line of lines) {
       // If we're collecting section data
       if (inSection) {
         sectionData.push(line);
-        
+
         // Check if we've collected all the data for this section
         const collectedData = sectionData.join('\r\n');
         if (collectedData.length >= sectionSize) {
@@ -497,22 +497,22 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
               const textData = sectionData.join('\r\n');
               const encoder = new TextEncoder();
               result.raw = encoder.encode(textData);
-              
+
               // Also try to extract the body
               if (!result.parts) {
                 result.parts = {};
               }
-              
+
               // Simple parsing to extract body from raw message
-              const parts = textData.split("\r\n\r\n");
+              const parts = textData.split('\r\n\r\n');
               if (parts.length > 1) {
                 // Everything after the first empty line is the body
-                const bodyText = parts.slice(1).join("\r\n\r\n");
+                const bodyText = parts.slice(1).join('\r\n\r\n');
                 const encoder = new TextEncoder();
                 (result.parts as Record<string, any>)['TEXT'] = {
                   data: encoder.encode(bodyText),
                   size: bodyText.length,
-                  type: 'text/plain' // Default type
+                  type: 'text/plain', // Default type
                 };
               }
             } else {
@@ -520,27 +520,27 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
               if (!result.parts) {
                 result.parts = {};
               }
-              
+
               // Convert the array of strings to a Uint8Array
               const textData = sectionData.join('\r\n');
               const encoder = new TextEncoder();
               (result.parts as Record<string, any>)[currentSection] = {
                 data: encoder.encode(textData),
                 size: textData.length,
-                type: 'text/plain' // Default type
+                type: 'text/plain', // Default type
               };
             }
           }
-          
+
           // Reset section collection
           inSection = false;
           currentSection = null;
           sectionData = [];
         }
-        
+
         continue;
       }
-      
+
       // Parse BODY[...] sections
       const bodyContentMatch = line.match(/BODY\[([^\]]+)\] \{(\d+)\}/i);
       if (bodyContentMatch) {
@@ -550,13 +550,13 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         sectionData = [];
         continue;
       }
-      
+
       // Handle the case where the body content is on the same line (for small content)
       const inlineBodyMatch = line.match(/BODY\[([^\]]+)\] "([^"]*)"/i);
       if (inlineBodyMatch) {
         const section = inlineBodyMatch[1];
         const content = inlineBodyMatch[2];
-        
+
         if (section === 'HEADER') {
           // Parse headers from inline content
           result.headers = parseHeaders([content]);
@@ -565,17 +565,17 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
           if (!result.parts) {
             result.parts = {};
           }
-          
+
           // Convert the string to a Uint8Array
           const encoder = new TextEncoder();
           (result.parts as Record<string, any>)[section] = {
             data: encoder.encode(content),
             size: content.length,
-            type: 'text/plain' // Default type
+            type: 'text/plain', // Default type
           };
         }
       }
-      
+
       // Handle full message content
       const fullBodyMatch = line.match(/BODY\[\] \{(\d+)\}/i);
       if (fullBodyMatch) {
@@ -586,11 +586,11 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         continue;
       }
     }
-    
+
     // Process any remaining section data
     if (inSection && currentSection && sectionData.length > 0) {
       const collectedData = sectionData.join('\r\n');
-      
+
       if (currentSection === 'HEADER') {
         // Parse headers
         result.headers = parseHeaders(sectionData);
@@ -599,22 +599,22 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         const textData = sectionData.join('\r\n');
         const encoder = new TextEncoder();
         result.raw = encoder.encode(textData);
-        
+
         // Also try to extract the body
         if (!result.parts) {
           result.parts = {};
         }
-        
+
         // Simple parsing to extract body from raw message
-        const parts = textData.split("\r\n\r\n");
+        const parts = textData.split('\r\n\r\n');
         if (parts.length > 1) {
           // Everything after the first empty line is the body
-          const bodyText = parts.slice(1).join("\r\n\r\n");
+          const bodyText = parts.slice(1).join('\r\n\r\n');
           const encoder = new TextEncoder();
           (result.parts as Record<string, any>)['TEXT'] = {
             data: encoder.encode(bodyText),
             size: bodyText.length,
-            type: 'text/plain' // Default type
+            type: 'text/plain', // Default type
           };
         }
       } else {
@@ -622,21 +622,21 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         if (!result.parts) {
           result.parts = {};
         }
-        
+
         // Convert the array of strings to a Uint8Array
         const textData = sectionData.join('\r\n');
         const encoder = new TextEncoder();
         (result.parts as Record<string, any>)[currentSection] = {
           data: encoder.encode(textData),
           size: textData.length,
-          type: 'text/plain' // Default type
+          type: 'text/plain', // Default type
         };
       }
     }
   } catch (error) {
-    console.warn("Error parsing fetch response:", error);
+    console.warn('Error parsing fetch response:', error);
   }
-  
+
   return result;
 }
 
@@ -649,22 +649,22 @@ function parseHeaders(headerLines: string[]): Record<string, string | string[]> 
   const headers: Record<string, string | string[]> = {};
   let currentHeader = '';
   let currentValue = '';
-  
+
   // Join all lines with proper line breaks
   const headerText = headerLines.join('\r\n');
-  
+
   // Split into individual header entries
   const headerEntries = headerText.split(/\r\n(?!\s)/);
-  
+
   for (const entry of headerEntries) {
     if (!entry.trim()) continue;
-    
+
     // Check if this is a new header or continuation
     const match = entry.match(/^([^:]+):\s*(.*(?:\r\n\s+.*)*)/);
     if (match) {
       const name = match[1].trim();
       const value = match[2].replace(/\r\n\s+/g, ' ').trim();
-      
+
       // Some headers can appear multiple times
       if (headers[name]) {
         if (Array.isArray(headers[name])) {
@@ -677,6 +677,6 @@ function parseHeaders(headerLines: string[]): Record<string, string | string[]> 
       }
     }
   }
-  
+
   return headers;
-} 
+}

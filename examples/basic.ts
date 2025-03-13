@@ -1,23 +1,23 @@
 /**
  * Basic IMAP client example
- * 
+ *
  * This example demonstrates how to use the IMAP client to connect to a server,
  * list mailboxes, and check the status of the INBOX.
- * 
+ *
  * To run this example, create a .env file with the following variables:
  * IMAP_HOST=your_imap_server
  * IMAP_PORT=993
  * IMAP_USERNAME=your_username
  * IMAP_PASSWORD=your_password
  * IMAP_USE_TLS=true
- * 
+ *
  * Then run with: deno run --allow-net --allow-env --env-file=.env examples/basic.ts
  */
 
-import { ImapClient } from "../mod.ts";
+import { ImapClient } from '../mod.ts';
 
 // Validate required environment variables
-const requiredEnvVars = ["IMAP_HOST", "IMAP_PORT", "IMAP_USERNAME", "IMAP_PASSWORD"];
+const requiredEnvVars = ['IMAP_HOST', 'IMAP_PORT', 'IMAP_USERNAME', 'IMAP_PASSWORD'];
 for (const envVar of requiredEnvVars) {
   if (!Deno.env.get(envVar)) {
     console.error(`Error: ${envVar} environment variable is required`);
@@ -26,11 +26,11 @@ for (const envVar of requiredEnvVars) {
 }
 
 // Get environment variables
-const host = Deno.env.get("IMAP_HOST")!;
-const port = parseInt(Deno.env.get("IMAP_PORT")!, 10);
-const username = Deno.env.get("IMAP_USERNAME")!;
-const password = Deno.env.get("IMAP_PASSWORD")!;
-const tls = Deno.env.get("IMAP_USE_TLS") !== "false"; // Default to true if not specified
+const host = Deno.env.get('IMAP_HOST')!;
+const port = parseInt(Deno.env.get('IMAP_PORT')!, 10);
+const username = Deno.env.get('IMAP_USERNAME')!;
+const password = Deno.env.get('IMAP_PASSWORD')!;
+const tls = Deno.env.get('IMAP_USE_TLS') !== 'false'; // Default to true if not specified
 
 // Create a new IMAP client
 const client = new ImapClient({
@@ -44,40 +44,45 @@ const client = new ImapClient({
 try {
   // Connect to the server
   await client.connect();
-  console.log("Connected to IMAP server");
+  console.log('Connected to IMAP server');
 
   // Authenticate
   await client.authenticate();
-  console.log("Authenticated");
+  console.log('Authenticated');
 
   // Get server capabilities
-  console.log("Server capabilities:", client.capabilities);
+  console.log('Server capabilities:', client.capabilities);
 
   // List available mailboxes
   const mailboxes = await client.listMailboxes();
-  console.log("\nAvailable mailboxes:");
+  console.log('\nAvailable mailboxes:');
   for (const mailbox of mailboxes) {
-    console.log(`- ${mailbox.name} (${mailbox.flags.join(", ")})`);
+    console.log(`- ${mailbox.name} (${mailbox.flags.join(', ')})`);
   }
 
   // Get status of INBOX using STATUS command
-  const inboxStatus = await client.getMailboxStatus("INBOX");
-  console.log(`\nINBOX status from getMailboxStatus: ${inboxStatus.exists} messages, ${inboxStatus.unseen} unseen`);
+  const inboxStatus = await client.getMailboxStatus('INBOX');
+  console.log(
+    `\nINBOX status from getMailboxStatus: ${inboxStatus.exists} messages, ${inboxStatus.unseen} unseen`,
+  );
 
   // Select the INBOX
-  const inbox = await client.selectMailbox("INBOX");
+  const inbox = await client.selectMailbox('INBOX');
   console.log(`INBOX status from selectMailbox: ${inbox.exists} messages, ${inbox.unseen} unseen`);
 } catch (error: unknown) {
-  console.error("Error:", error instanceof Error ? error.message : String(error));
+  console.error('Error:', error instanceof Error ? error.message : String(error));
 } finally {
   try {
     // Try to disconnect gracefully
     await client.disconnect();
-    console.log("\nDisconnected from IMAP server");
+    console.log('\nDisconnected from IMAP server');
   } catch (error) {
     // If disconnect fails, force close
-    console.error("Error during disconnect:", error instanceof Error ? error.message : String(error));
+    console.error(
+      'Error during disconnect:',
+      error instanceof Error ? error.message : String(error),
+    );
     client.close();
-    console.log("\nForced close of IMAP client");
+    console.log('\nForced close of IMAP client');
   }
-} 
+}

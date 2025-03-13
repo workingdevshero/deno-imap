@@ -3,17 +3,17 @@
  * @module
  */
 
-export * from "./promises.ts";
+export * from './promises.ts';
 
 /**
  * IMAP Utilities
- * 
+ *
  * This module contains utility functions for working with IMAP.
  * @module
  */
 
-import { ImapClient } from "../client.ts";
-import { ImapFetchOptions, ImapMessage, ImapSearchCriteria } from "../types/mod.ts";
+import { ImapClient } from '../client.ts';
+import { ImapFetchOptions, ImapMessage, ImapSearchCriteria } from '../types/mod.ts';
 
 /**
  * Fetches all messages in a mailbox
@@ -29,17 +29,17 @@ export async function fetchAllMessages(
 ): Promise<ImapMessage[]> {
   // Select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Get the mailbox status
   const status = await client.getMailboxStatus(mailbox);
-  
+
   if (!status.exists || status.exists === 0) {
     return [];
   }
-  
+
   // Ensure UID is included in the fetch options
   const fetchOptions = { ...options, uid: true };
-  
+
   // Fetch all messages
   return await client.fetch(`1:${status.exists}`, fetchOptions);
 }
@@ -60,19 +60,19 @@ export async function searchAndFetchMessages(
 ): Promise<ImapMessage[]> {
   // Select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Search for messages
   const messageNumbers = await client.search(criteria);
-  
+
   if (messageNumbers.length === 0) {
     return [];
   }
-  
+
   // Ensure UID is included in the fetch options
   const fetchOptions = { ...options, uid: true };
-  
+
   // Fetch the messages
-  return await client.fetch(messageNumbers.join(","), fetchOptions);
+  return await client.fetch(messageNumbers.join(','), fetchOptions);
 }
 
 /**
@@ -89,19 +89,19 @@ export async function fetchUnreadMessages(
 ): Promise<ImapMessage[]> {
   // First, select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Search for unseen messages
-  const unseenIds = await client.search({ flags: { has: ["Unseen"] } });
-  
+  const unseenIds = await client.search({ flags: { has: ['Unseen'] } });
+
   if (unseenIds.length === 0) {
     return [];
   }
-  
+
   // Ensure UID is included in the fetch options
   const fetchOptions = { ...options, uid: true };
-  
+
   // Fetch the messages
-  return await client.fetch(unseenIds.join(","), fetchOptions);
+  return await client.fetch(unseenIds.join(','), fetchOptions);
 }
 
 /**
@@ -121,7 +121,7 @@ export async function fetchMessagesFromSender(
   return await searchAndFetchMessages(
     client,
     mailbox,
-    { header: [{ field: "FROM", value: sender }] },
+    { header: [{ field: 'FROM', value: sender }] },
     { ...options, uid: true },
   );
 }
@@ -143,7 +143,7 @@ export async function fetchMessagesWithSubject(
   return await searchAndFetchMessages(
     client,
     mailbox,
-    { header: [{ field: "SUBJECT", value: subject }] },
+    { header: [{ field: 'SUBJECT', value: subject }] },
     options,
   );
 }
@@ -187,13 +187,13 @@ export async function fetchMessagesWithAttachments(
     ...options,
     bodyStructure: true,
   });
-  
+
   // Filter messages with attachments
   return messages.filter((message) => {
     if (!message.bodyStructure) {
       return false;
     }
-    
+
     // Check if the message has attachments
     // This is a simplified check, a real implementation would be more complex
     return hasAttachments(message.bodyStructure);
@@ -228,12 +228,12 @@ export async function markMessagesAsRead(
   if (messageIds.length === 0) {
     return;
   }
-  
+
   // Select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Set the \Seen flag
-  await client.setFlags(messageIds.join(","), ["\\Seen"], "add", useUid);
+  await client.setFlags(messageIds.join(','), ['\\Seen'], 'add', useUid);
 }
 
 /**
@@ -253,12 +253,12 @@ export async function markMessagesAsUnread(
   if (messageIds.length === 0) {
     return;
   }
-  
+
   // Select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Remove the \Seen flag
-  await client.setFlags(messageIds.join(","), ["\\Seen"], "remove", useUid);
+  await client.setFlags(messageIds.join(','), ['\\Seen'], 'remove', useUid);
 }
 
 /**
@@ -278,13 +278,13 @@ export async function deleteMessages(
   if (messageIds.length === 0) {
     return;
   }
-  
+
   // Select the mailbox
   await client.selectMailbox(mailbox);
-  
+
   // Set the \Deleted flag
-  await client.setFlags(messageIds.join(","), ["\\Deleted"], "add", useUid);
-  
+  await client.setFlags(messageIds.join(','), ['\\Deleted'], 'add', useUid);
+
   // Expunge the messages
   await client.expunge();
 }
@@ -308,12 +308,12 @@ export async function moveMessages(
   if (messageIds.length === 0) {
     return;
   }
-  
+
   // Select the source mailbox
   await client.selectMailbox(sourceMailbox);
-  
+
   // Move the messages
-  await client.moveMessages(messageIds.join(","), targetMailbox, useUid);
+  await client.moveMessages(messageIds.join(','), targetMailbox, useUid);
 }
 
 /**
@@ -326,23 +326,23 @@ export async function moveMessages(
 export async function createMailboxHierarchy(
   client: ImapClient,
   path: string,
-  delimiter = "/",
+  delimiter = '/',
 ): Promise<void> {
   const parts = path.split(delimiter);
-  let currentPath = "";
-  
+  let currentPath = '';
+
   for (const part of parts) {
     if (currentPath) {
       currentPath += delimiter;
     }
-    
+
     currentPath += part;
-    
+
     try {
       await client.createMailbox(currentPath);
     } catch (error: unknown) {
       // Ignore errors if the mailbox already exists
-      if (error instanceof Error && !error.message.includes("ALREADYEXISTS")) {
+      if (error instanceof Error && !error.message.includes('ALREADYEXISTS')) {
         throw error;
       }
     }
@@ -358,30 +358,30 @@ export async function createMailboxHierarchy(
  */
 export async function getMailboxHierarchy(
   client: ImapClient,
-  reference = "",
-  pattern = "*",
+  reference = '',
+  pattern = '*',
 ): Promise<Map<string, string[]>> {
   const mailboxes = await client.listMailboxes(reference, pattern);
   const hierarchy = new Map<string, string[]>();
-  
+
   for (const mailbox of mailboxes) {
     const parts = mailbox.name.split(mailbox.delimiter);
-    let parent = "";
-    
+    let parent = '';
+
     for (let i = 0; i < parts.length - 1; i++) {
       if (parent) {
         parent += mailbox.delimiter;
       }
-      
+
       parent += parts[i];
     }
-    
+
     if (!hierarchy.has(parent)) {
       hierarchy.set(parent, []);
     }
-    
+
     hierarchy.get(parent)?.push(mailbox.name);
   }
-  
+
   return hierarchy;
-} 
+}
