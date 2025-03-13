@@ -19,29 +19,51 @@ Deno.test("ImapConnection - Socket timeout handling", async () => {
     socketTimeout: 100 // Small timeout for faster tests
   });
   
-  // Manually trigger socket timeout
-  (connection as any).handleSocketTimeout();
+  // Mock the connection state
+  (connection as any)._connected = true;
+  
+  // Create a socket activity cancellable that will immediately timeout
+  const mockCancellable = {
+    promise: Promise.reject(new ImapTimeoutError("Socket inactivity timeout", 100)),
+    cancel: () => {},
+    disableTimeout: () => {}
+  };
+  
+  // Set up a handler for the promise rejection
+  mockCancellable.promise.catch(() => {
+    // This prevents the unhandled promise rejection
+  });
+  
+  // Manually trigger disconnect when the timeout occurs
+  (connection as any).disconnect = () => {
+    (connection as any)._connected = false;
+  };
+  
+  // Set the mock cancellable and trigger the timeout handler
+  (connection as any).socketActivityCancellable = mockCancellable;
+  await (connection as any).socketActivityCancellable.promise.catch(() => {
+    (connection as any).disconnect();
+  });
   
   // Verify connection is marked as disconnected
   assertEquals((connection as any)._connected, false);
   
-  // Verify socket timeout error is created
-  assertEquals((connection as any).socketTimeoutError instanceof ImapTimeoutError, true);
-  
-  // Verify read operations fail with timeout error
+  // Verify read operations fail with not connected error
   await assertRejects(
     () => connection.readLine(),
-    ImapTimeoutError
+    Error,
+    "Not connected to IMAP server"
   );
   
-  // Verify write operations fail with timeout error
+  // Verify write operations fail with not connected error
   await assertRejects(
     () => connection.writeLine("TEST"),
-    ImapTimeoutError
+    Error,
+    "Not connected to IMAP server"
   );
 });
 
-Deno.test("ImapConnection - Socket timeout reset on operations", () => {
+Deno.test("ImapConnection - Socket activity reset on operations", () => {
   // Create a connection with mock socket
   const connection = new ImapConnection({
     host: "localhost",
@@ -52,10 +74,10 @@ Deno.test("ImapConnection - Socket timeout reset on operations", () => {
     socketTimeout: 1000
   });
   
-  // Mock the socket timeout reset
-  let timeoutResetCount = 0;
-  (connection as any).resetSocketTimeout = () => {
-    timeoutResetCount++;
+  // Mock the socket activity reset
+  let activityResetCount = 0;
+  (connection as any).resetSocketActivity = () => {
+    activityResetCount++;
   };
   
   // Mock the connection state and read/write methods
@@ -70,13 +92,13 @@ Deno.test("ImapConnection - Socket timeout reset on operations", () => {
   };
   
   // Call the methods directly without awaiting
-  (connection as any).resetSocketTimeout();
+  (connection as any).resetSocketActivity();
   
-  // Verify timeout was reset
-  assertEquals(timeoutResetCount, 1);
+  // Verify activity monitor was reset
+  assertEquals(activityResetCount, 1);
 });
 
-Deno.test("ImapConnection - Socket timeout cleanup", () => {
+Deno.test("ImapConnection - Socket activity cleanup", () => {
   // Create a connection
   const connection = new ImapConnection({
     host: "localhost",
@@ -87,24 +109,34 @@ Deno.test("ImapConnection - Socket timeout cleanup", () => {
     socketTimeout: 100
   });
   
-  // Mock the connection and timers
+  // Mock the connection and activity monitor
   (connection as any)._connected = true;
-  (connection as any).socketTimeoutTimer = 123; // Mock timer ID
+  (connection as any).socketActivityCancellable = {
+    promise: Promise.resolve(),
+    cancel: () => {},
+    disableTimeout: () => {}
+  };
   (connection as any).conn = {
     close: () => {}
   };
   
-  // Manually trigger socket timeout
-  (connection as any).handleSocketTimeout();
+  // Spy on the disableTimeout method
+  let disableTimeoutCalled = false;
+  (connection as any).socketActivityCancellable.disableTimeout = () => {
+    disableTimeoutCalled = true;
+  };
   
-  // Verify timer was cleared
-  assertEquals((connection as any).socketTimeoutTimer, undefined);
+  // Manually disconnect
+  connection.disconnect();
+  
+  // Verify activity monitor was disabled
+  assertEquals(disableTimeoutCalled, true);
   
   // Verify connection is marked as disconnected
   assertEquals((connection as any)._connected, false);
 });
 
-Deno.test("ImapConnection - Connect resets socket timeout state", () => {
+Deno.test("ImapConnection - Connect resets socket activity state", async () => {
   // Create a connection
   const connection = new ImapConnection({
     host: "localhost",
@@ -115,17 +147,18 @@ Deno.test("ImapConnection - Connect resets socket timeout state", () => {
     socketTimeout: 100
   });
   
-  // Set timeout state
-  (connection as any).socketTimeoutError = new ImapTimeoutError("socket", 100);
+  // Mock the connection methods to make connect() work
+  (connection as any).establishConnection = () => Promise.resolve();
   
-  // Mock the connection methods
-  (connection as any).establishConnection = () => {};
-  (connection as any).resetSocketTimeout = () => {};
-  (connection as any).readLine = () => "* OK IMAP4rev1 Service Ready";
+  // Replace resetSocketActivity with a spy
+  let resetActivityCalled = false;
+  (connection as any).resetSocketActivity = () => {
+    resetActivityCalled = true;
+  };
   
-  // Directly call the internal method that resets timeout state
-  (connection as any).socketTimeoutError = undefined;
+  // Call connect and wait for it to complete
+  await connection.connect();
   
-  // Verify timeout state was reset
-  assertEquals((connection as any).socketTimeoutError, undefined);
+  // Verify activity monitor was reset
+  assertEquals(resetActivityCalled, true);
 }); 

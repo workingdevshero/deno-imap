@@ -57,12 +57,10 @@ export class ImapConnection {
   private encoder = new TextEncoder();
   /** Buffered data that hasn't been processed yet */
   private bufferedData = "";
-  /** Connection timeout timer */
-  private connectionTimeoutTimer?: number;
-  /** Socket timeout timer */
-  private socketTimeoutTimer?: number;
-  /** Socket timeout error */
-  private socketTimeoutError?: ImapTimeoutError;
+  /** Connection timeout cancellable promise */
+  private connectionTimeoutCancellable?: ReturnType<typeof createCancellablePromise>;
+  /** Current socket activity cancellable promise */
+  private socketActivityCancellable?: ReturnType<typeof createCancellablePromise>;
 
   /**
    * Creates a new IMAP connection
@@ -97,26 +95,23 @@ export class ImapConnection {
       return;
     }
 
-    // Reset socket timeout state
-    this.socketTimeoutError = undefined;
-
     try {
       // Create a cancellable promise for the connection
       const timeoutMs = this.options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT;
-      const cancellable = createCancellablePromise<void>(
+      this.connectionTimeoutCancellable = createCancellablePromise<void>(
         () => this.establishConnection(),
         timeoutMs,
         `Connection timeout to ${this.options.host}:${this.options.port}`
       );
 
       // Wait for the connection to be established or timeout
-      await cancellable.promise;
+      await this.connectionTimeoutCancellable.promise;
 
       // Clear the timeout
-      cancellable.disableTimeout();
+      this.connectionTimeoutCancellable.disableTimeout();
 
-      // Set socket timeout
-      this.resetSocketTimeout();
+      // Start socket activity monitoring
+      this.resetSocketActivity();
 
       this._connected = true;
     } catch (error) {
@@ -164,56 +159,53 @@ export class ImapConnection {
   }
 
   /**
-   * Resets the socket timeout
+   * Resets the socket activity monitor
+   * This creates a new cancellable promise that will timeout if no socket activity occurs
    */
-  private resetSocketTimeout(): void {
-    // Clear existing timeout
-    if (this.socketTimeoutTimer) {
-      clearTimeout(this.socketTimeoutTimer);
-      this.socketTimeoutTimer = undefined;
+  private resetSocketActivity(): void {
+    // Clear any existing socket activity monitor
+    if (this.socketActivityCancellable) {
+      this.socketActivityCancellable.disableTimeout();
+      this.socketActivityCancellable = undefined;
     }
 
-    // Reset the socket timeout error
-    this.socketTimeoutError = undefined;
+    // Only set up socket activity monitoring if connected
+    if (!this._connected) {
+      return;
+    }
 
-    // Set new timeout
-    this.socketTimeoutTimer = setTimeout(() => {
-      console.log("Socket timeout");
-      this.handleSocketTimeout();
-      this.socketTimeoutTimer = undefined;
-    }, this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT);
-  }
-
-  /**
-   * Handles socket timeout
-   */
-  private handleSocketTimeout(): void {
-    // Create the timeout error
-    // We do this because throwing in setTimeout is not catchable by the caller
-    this.socketTimeoutError = new ImapTimeoutError(
-      "socket",
-      this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT
+    // Create a new socket activity monitor
+    const timeoutMs = this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT;
+    this.socketActivityCancellable = createCancellablePromise<void>(
+      // This promise never resolves on its own - it's just for the timeout
+      () => new Promise<void>(() => {}),
+      timeoutMs,
+      "Socket inactivity timeout"
     );
 
-    // Close connections and clear timeouts, but preserve the error
-    const savedError = this.socketTimeoutError;
-    this.disconnect();
-    this.socketTimeoutError = savedError;
+    // When the socket times out, disconnect
+    this.socketActivityCancellable.promise.catch((error) => {
+      if (error instanceof ImapTimeoutError) {
+        console.log("Socket inactivity timeout, disconnecting");
+        this.disconnect();
+      }
+    });
   }
 
   /**
    * Disconnects from the IMAP server and cleans up resources
    */
   disconnect(): void {
-    // Clear all timeouts
-    if (this.connectionTimeoutTimer) {
-      clearTimeout(this.connectionTimeoutTimer);
-      this.connectionTimeoutTimer = undefined;
+    // Clear connection timeout
+    if (this.connectionTimeoutCancellable) {
+      this.connectionTimeoutCancellable.disableTimeout();
+      this.connectionTimeoutCancellable = undefined;
     }
 
-    if (this.socketTimeoutTimer) {
-      clearTimeout(this.socketTimeoutTimer);
-      this.socketTimeoutTimer = undefined;
+    // Clear socket activity monitor
+    if (this.socketActivityCancellable) {
+      this.socketActivityCancellable.disableTimeout();
+      this.socketActivityCancellable = undefined;
     }
 
     // Close connections
@@ -237,7 +229,6 @@ export class ImapConnection {
 
     // Reset state
     this._connected = false;
-    this.socketTimeoutError = undefined;
     this.bufferedData = "";
   }
 
@@ -248,19 +239,12 @@ export class ImapConnection {
    * @throws {ImapTimeoutError} If socket has timed out
    */
   async write(data: string): Promise<void> {
-    // Check if socket has timed out
-    if (this.socketTimeoutError) {
-      throw this.socketTimeoutError;
-    }
-
     if (!this._connected) {
       throw new ImapNotConnectedError();
     }
 
-    // Only reset socket timeout if still connected
-    if (this._connected) {
-      this.resetSocketTimeout();
-    }
+    // Reset socket activity monitor
+    this.resetSocketActivity();
 
     const bytes = this.encoder.encode(data);
     const conn = this.tlsConn || this.conn;
@@ -295,17 +279,12 @@ export class ImapConnection {
    * @throws {ImapTimeoutError} If socket has timed out
    */
   async read(): Promise<string> {
-    // Check if socket has timed out
-    if (this.socketTimeoutError) {
-      throw this.socketTimeoutError;
-    }
-
     if (!this._connected) {
       throw new ImapNotConnectedError();
     }
 
-    // Reset socket timeout
-    this.resetSocketTimeout();
+    // Reset socket activity monitor
+    this.resetSocketActivity();
 
     const conn = this.tlsConn || this.conn;
 
@@ -351,9 +330,9 @@ export class ImapConnection {
       
       return result;
     } catch (error) {
-      // If it's a timeout error, store it
+      // If it's a timeout error, disconnect and rethrow
       if (error instanceof ImapTimeoutError) {
-        this.socketTimeoutError = error;
+        this.disconnect();
       }
       
       // Rethrow the error
@@ -373,9 +352,8 @@ export class ImapConnection {
    * @returns Promise that resolves with the line
    */
   async readLine(): Promise<string> {
-    // Check if socket has timed out
-    if (this.socketTimeoutError) {
-      throw this.socketTimeoutError;
+    if (!this._connected) {
+      throw new ImapNotConnectedError();
     }
 
     // Check if we have a line in the buffer
@@ -386,13 +364,13 @@ export class ImapConnection {
       const line = this.bufferedData.substring(0, crlfIndex);
       this.bufferedData = this.bufferedData.substring(crlfIndex + CRLF.length);
       
-      // Reset socket timeout since we successfully read data
-      this.resetSocketTimeout();
+      // Reset socket activity monitor since we successfully read data
+      this.resetSocketActivity();
       
       return line;
     }
 
-    // Read more data using a cancellable promise
+    // Read more data
     try {
       const data = await this.read();
       this.bufferedData += data;
@@ -400,10 +378,6 @@ export class ImapConnection {
       // Try again
       return this.readLine();
     } catch (error) {
-      // If it's a timeout error, store it and rethrow
-      if (error instanceof ImapTimeoutError) {
-        this.socketTimeoutError = error;
-      }
       throw error;
     }
   }

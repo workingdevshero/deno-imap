@@ -71,8 +71,8 @@ export class ImapClient {
   private _capabilities: Set<string> = new Set();
   /** Currently selected mailbox */
   private _selectedMailbox?: ImapMailbox;
-  /** Command timeout timer */
-  private commandTimeoutTimer?: number;
+  /** Command timeout cancellable promise */
+  private commandTimeoutCancellable?: ReturnType<typeof createCancellablePromise>;
   /** Whether the client is authenticated */
   private _authenticated = false;
   /** Command promises */
@@ -220,9 +220,9 @@ export class ImapClient {
     }
 
     // First, cancel any pending command timeouts
-    if (this.commandTimeoutTimer) {
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = undefined;
+    if (this.commandTimeoutCancellable) {
+      this.commandTimeoutCancellable.disableTimeout();
+      this.commandTimeoutCancellable = undefined;
     }
 
     try {
@@ -1042,10 +1042,8 @@ export class ImapClient {
       `Command timeout: ${command}`
     );
 
-    // Store the timeout clear function for later use
-    this.commandTimeoutTimer = setTimeout(() => {}, 0);
-    clearTimeout(this.commandTimeoutTimer);
-    this.commandTimeoutTimer = 1 as unknown as number; // Just a non-undefined value as a flag
+    // Store the cancellable promise for later cleanup
+    this.commandTimeoutCancellable = cancellable;
     
     try {
       // Wait for the command to complete or timeout
@@ -1056,7 +1054,7 @@ export class ImapClient {
     } finally {
       // Clear the timeout
       cancellable.disableTimeout();
-      this.commandTimeoutTimer = undefined;
+      this.commandTimeoutCancellable = undefined;
     }
   }
 
@@ -1248,9 +1246,9 @@ export class ImapClient {
    */
   close(): void {
     // Cancel any pending command timeouts
-    if (this.commandTimeoutTimer) {
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = undefined;
+    if (this.commandTimeoutCancellable) {
+      this.commandTimeoutCancellable.disableTimeout();
+      this.commandTimeoutCancellable = undefined;
     }
     
     // Cancel all pending commands immediately

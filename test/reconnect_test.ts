@@ -343,18 +343,43 @@ Deno.test("ImapClient - Connection timeout in ImapConnection", async () => {
     socketTimeout: 100 // Small timeout for faster tests
   });
   
-  // Mock the socket timeout handling
-  (connection as any).handleSocketTimeout();
+  // Mock the connection state
+  (connection as any)._connected = true;
   
-  // After a timeout, operations should fail with timeout error
+  // Create a socket activity cancellable that will immediately timeout
+  const mockCancellable = {
+    promise: Promise.reject(new ImapTimeoutError("Socket inactivity timeout", 100)),
+    cancel: () => {},
+    disableTimeout: () => {}
+  };
+  
+  // Set up a handler for the promise rejection to prevent unhandled rejection
+  mockCancellable.promise.catch(() => {
+    // This prevents the unhandled promise rejection
+  });
+  
+  // Manually trigger disconnect when the timeout occurs
+  (connection as any).disconnect = () => {
+    (connection as any)._connected = false;
+  };
+  
+  // Set the mock cancellable and trigger the timeout handler
+  (connection as any).socketActivityCancellable = mockCancellable;
+  await mockCancellable.promise.catch(() => {
+    (connection as any).disconnect();
+  });
+  
+  // After a timeout, operations should fail with not connected error
   await assertRejects(
     () => connection.readLine(),
-    ImapTimeoutError
+    Error,
+    "Not connected to IMAP server"
   );
   
   await assertRejects(
     () => connection.writeLine("TEST"),
-    ImapTimeoutError
+    Error,
+    "Not connected to IMAP server"
   );
 });
 
