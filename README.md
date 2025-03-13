@@ -222,11 +222,15 @@ new ImapClient(options: ImapOptions)
 - `unsubscribeMailbox(mailbox: string)`: Unsubscribes from a mailbox
 - `search(criteria: ImapSearchCriteria, charset?: string)`: Searches for messages
 - `fetch(sequence: string, options: ImapFetchOptions)`: Fetches messages
-- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`: Sets flags on messages
-- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another mailbox
-- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another mailbox
+- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`:
+  Sets flags on messages
+- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another
+  mailbox
+- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another
+  mailbox
 - `expunge()`: Expunges deleted messages
-- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a message to a mailbox
+- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a
+  message to a mailbox
 - `forceReconnect()`: Forces a reconnection to the server
 - `updateCapabilities()`: Updates the server capabilities
 - `close()`: Closes the connection (alias for disconnect)
@@ -245,31 +249,46 @@ The package includes utility functions for common operations:
 
 #### Message Retrieval
 
-- `fetchAllMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches all messages in a mailbox
-- `searchAndFetchMessages(client: ImapClient, mailbox: string, criteria: ImapSearchCriteria, options?: ImapFetchOptions)`: Fetches messages matching search criteria
-- `fetchUnreadMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches unread messages
-- `fetchMessagesFromSender(client: ImapClient, mailbox: string, sender: string, options?: ImapFetchOptions)`: Fetches messages from a specific sender
-- `fetchMessagesWithSubject(client: ImapClient, mailbox: string, subject: string, options?: ImapFetchOptions)`: Fetches messages with a specific subject
-- `fetchMessagesSince(client: ImapClient, mailbox: string, since: Date, options?: ImapFetchOptions)`: Fetches messages received since a specific date
-- `fetchMessagesWithAttachments(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches messages with attachments
+- `fetchAllMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches all
+  messages in a mailbox
+- `searchAndFetchMessages(client: ImapClient, mailbox: string, criteria: ImapSearchCriteria, options?: ImapFetchOptions)`:
+  Fetches messages matching search criteria
+- `fetchUnreadMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches
+  unread messages
+- `fetchMessagesFromSender(client: ImapClient, mailbox: string, sender: string, options?: ImapFetchOptions)`:
+  Fetches messages from a specific sender
+- `fetchMessagesWithSubject(client: ImapClient, mailbox: string, subject: string, options?: ImapFetchOptions)`:
+  Fetches messages with a specific subject
+- `fetchMessagesSince(client: ImapClient, mailbox: string, since: Date, options?: ImapFetchOptions)`:
+  Fetches messages received since a specific date
+- `fetchMessagesWithAttachments(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`:
+  Fetches messages with attachments
 
 #### Message Management
 
-- `markMessagesAsRead(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Marks messages as read
-- `markMessagesAsUnread(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Marks messages as unread
-- `deleteMessages(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Deletes messages
-- `moveMessages(client: ImapClient, sourceMailbox: string, targetMailbox: string, messageIds: number[], useUid?: boolean)`: Moves messages between mailboxes
+- `markMessagesAsRead(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`:
+  Marks messages as read
+- `markMessagesAsUnread(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`:
+  Marks messages as unread
+- `deleteMessages(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`:
+  Deletes messages
+- `moveMessages(client: ImapClient, sourceMailbox: string, targetMailbox: string, messageIds: number[], useUid?: boolean)`:
+  Moves messages between mailboxes
 
 #### Mailbox Management
 
-- `createMailboxHierarchy(client: ImapClient, path: string, delimiter?: string)`: Creates a mailbox hierarchy
-- `getMailboxHierarchy(client: ImapClient, reference?: string, pattern?: string)`: Gets the mailbox hierarchy
+- `createMailboxHierarchy(client: ImapClient, path: string, delimiter?: string)`: Creates a mailbox
+  hierarchy
+- `getMailboxHierarchy(client: ImapClient, reference?: string, pattern?: string)`: Gets the mailbox
+  hierarchy
 
 #### Attachment Handling
 
 - `hasAttachments(bodyStructure: ImapBodyStructure)`: Determines if a message has attachments
-- `findAttachments(bodyStructure: ImapBodyStructure, path?: string)`: Extracts detailed information about attachments
-- `decodeAttachment(data: Uint8Array, encoding: string)`: Decodes an attachment based on its encoding
+- `findAttachments(bodyStructure: ImapBodyStructure, path?: string)`: Extracts detailed information
+  about attachments
+- `decodeAttachment(data: Uint8Array, encoding: string)`: Decodes an attachment based on its
+  encoding
 
 #### Parser Functions
 
@@ -292,7 +311,8 @@ Determines if a message has attachments based on its body structure.
 hasAttachments(bodyStructure: ImapBodyStructure): boolean
 ```
 
-This function analyzes the body structure of an email message to determine if it contains attachments. It considers the following criteria:
+This function analyzes the body structure of an email message to determine if it contains
+attachments. It considers the following criteria:
 
 - Parts with explicit `ATTACHMENT` disposition
 - Parts with `INLINE` disposition that have a filename
@@ -315,7 +335,8 @@ findAttachments(bodyStructure: ImapBodyStructure, path?: string): Array<{
 }>
 ```
 
-This function analyzes the body structure of an email message and returns an array of attachment objects with detailed information about each attachment, including:
+This function analyzes the body structure of an email message and returns an array of attachment
+objects with detailed information about each attachment, including:
 
 - `filename`: The name of the attachment file
 - `type`: The MIME type (e.g., "IMAGE", "APPLICATION")
