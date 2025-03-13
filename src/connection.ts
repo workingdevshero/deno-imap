@@ -60,6 +60,10 @@ export class ImapConnection {
   private connectionTimeoutTimer?: number;
   /** Socket timeout timer */
   private socketTimeoutTimer?: number;
+  /** Whether the socket has timed out */
+  private _socketTimedOut = false;
+  /** Socket timeout error */
+  private socketTimeoutError?: ImapTimeoutError;
 
   /**
    * Creates a new IMAP connection
@@ -91,6 +95,10 @@ export class ImapConnection {
     if (this._connected) {
       return;
     }
+
+    // Reset socket timeout state
+    this._socketTimedOut = false;
+    this.socketTimeoutError = undefined;
 
     try {
       // Set connection timeout
@@ -174,9 +182,13 @@ export class ImapConnection {
    * Handles socket timeout
    */
   private handleSocketTimeout(): void {
+    // Instead of throwing an exception directly, mark the connection as timed out
+    // and close it. Subsequent read/write operations will fail with a timeout error.
+    this._socketTimedOut = true;
+    this.socketTimeoutError = new ImapTimeoutError("socket", this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT);
+    
+    // Clean up the connection
     this.cleanup();
-    this._connected = false;
-    throw new ImapTimeoutError("socket", this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT);
   }
 
   /**
@@ -223,8 +235,14 @@ export class ImapConnection {
    * Writes data to the socket
    * @param data Data to write
    * @throws {ImapNotConnectedError} If not connected
+   * @throws {ImapTimeoutError} If socket has timed out
    */
   async write(data: string): Promise<void> {
+    // Check if socket has timed out
+    if (this._socketTimedOut && this.socketTimeoutError) {
+      throw this.socketTimeoutError;
+    }
+
     if (!this._connected) {
       throw new ImapNotConnectedError();
     }
@@ -261,8 +279,14 @@ export class ImapConnection {
    * Reads data from the socket
    * @returns Promise that resolves with the data
    * @throws {ImapNotConnectedError} If not connected
+   * @throws {ImapTimeoutError} If socket has timed out
    */
   async read(): Promise<string> {
+    // Check if socket has timed out
+    if (this._socketTimedOut && this.socketTimeoutError) {
+      throw this.socketTimeoutError;
+    }
+
     if (!this._connected) {
       throw new ImapNotConnectedError();
     }
@@ -300,6 +324,11 @@ export class ImapConnection {
    * @returns Promise that resolves with the line
    */
   async readLine(): Promise<string> {
+    // Check if socket has timed out
+    if (this._socketTimedOut && this.socketTimeoutError) {
+      throw this.socketTimeoutError;
+    }
+
     // Check if we have a line in the buffer
     const crlfIndex = this.bufferedData.indexOf(CRLF);
     
