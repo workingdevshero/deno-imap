@@ -892,7 +892,7 @@ export class ImapClient {
     }
 
     const tag = this.generateTag();
-    const commandPromise = new Promise<string[]>((resolve, reject) => {
+    const _commandPromise = new Promise<string[]>((resolve, reject) => {
       this.commandPromises.set(tag, { resolve, reject });
     });
 
@@ -1133,13 +1133,6 @@ export class ImapClient {
             }
 
             console.log('Reconnection successful');
-
-            // Return the current mailbox name
-            let currentMailbox: string | undefined;
-            if (this._selectedMailbox) {
-              currentMailbox = this._selectedMailbox.name;
-            }
-
             this.reconnectAttempts = 0;
             return;
           }

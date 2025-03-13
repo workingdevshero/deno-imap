@@ -12,8 +12,12 @@ export * from './promises.ts';
  * @module
  */
 
-import { ImapClient } from '../client.ts';
-import { ImapFetchOptions, ImapMessage, ImapSearchCriteria } from '../types/mod.ts';
+import type { ImapClient } from "../client.ts";
+import type {
+  ImapFetchOptions,
+  ImapMessage,
+  ImapSearchCriteria,
+} from "../types/mod.ts";
 
 /**
  * Fetches all messages in a mailbox

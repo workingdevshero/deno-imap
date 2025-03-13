@@ -5,8 +5,13 @@
  * @module
  */
 
-import { ImapParseError } from '../errors.ts';
-import { ImapAddress, ImapBodyStructure, ImapEnvelope, ImapMailbox } from '../types/mod.ts';
+import { ImapParseError } from "../errors.ts";
+import type {
+  ImapAddress,
+  ImapBodyStructure,
+  ImapEnvelope,
+  ImapMailbox,
+} from "../types/mod.ts";
 
 /**
  * Parses a capability response
@@ -18,10 +23,10 @@ export function parseCapabilities(line: string): string[] {
   const match = line.match(/^\* CAPABILITY (.+)$/i);
 
   if (!match) {
-    throw new ImapParseError('Invalid capability response', line);
+    throw new ImapParseError("Invalid capability response", line);
   }
 
-  return match[1].split(' ');
+  return match[1].split(" ");
 }
 
 /**
@@ -34,13 +39,16 @@ export function parseListResponse(line: string): ImapMailbox {
   const match = line.match(/^\* LIST \((.*?)\) "(.+?)" (.+)$/i);
 
   if (!match) {
-    throw new ImapParseError('Invalid list response', line);
+    throw new ImapParseError("Invalid list response", line);
   }
 
-  const flags = match[1].split(' ').filter(Boolean).map((flag) => {
-    // Remove backslashes and quotes
-    return flag.replace(/^\\/, '').replace(/^"(.*)"$/, '$1');
-  });
+  const flags = match[1]
+    .split(" ")
+    .filter(Boolean)
+    .map((flag) => {
+      // Remove backslashes and quotes
+      return flag.replace(/^\\/, "").replace(/^"(.*)"$/, "$1");
+    });
 
   const delimiter = match[2];
   let name = match[3];
@@ -67,11 +75,11 @@ export function parseStatus(line: string): Partial<ImapMailbox> {
   const match = line.match(/^\* STATUS "?([^"]+)"? \((.*)\)$/i);
 
   if (!match) {
-    throw new ImapParseError('Invalid status response', line);
+    throw new ImapParseError("Invalid status response", line);
   }
 
   const name = match[1];
-  const statusItems = match[2].split(' ');
+  const statusItems = match[2].split(" ");
   const result: Partial<ImapMailbox> = { name };
 
   for (let i = 0; i < statusItems.length; i += 2) {
@@ -79,19 +87,19 @@ export function parseStatus(line: string): Partial<ImapMailbox> {
     const value = parseInt(statusItems[i + 1], 10);
 
     switch (key) {
-      case 'messages':
+      case "messages":
         result.exists = value;
         break;
-      case 'recent':
+      case "recent":
         result.recent = value;
         break;
-      case 'unseen':
+      case "unseen":
         result.unseen = value;
         break;
-      case 'uidnext':
+      case "uidnext":
         result.uidNext = value;
         break;
-      case 'uidvalidity':
+      case "uidvalidity":
         result.uidValidity = value;
         break;
     }
@@ -149,7 +157,7 @@ export function parseSelect(lines: string[]): Partial<ImapMailbox> {
     // FLAGS response
     match = line.match(/^\* FLAGS \((.*)\)$/i);
     if (match) {
-      result.flags = match[1].split(' ').filter(Boolean);
+      result.flags = match[1].split(" ").filter(Boolean);
       continue;
     }
   }
@@ -167,12 +175,12 @@ export function parseSearch(line: string): number[] {
   const match = line.match(/^\* SEARCH(.*)$/i);
 
   if (!match) {
-    throw new ImapParseError('Invalid search response', line);
+    throw new ImapParseError("Invalid search response", line);
   }
 
   return match[1]
     .trim()
-    .split(' ')
+    .split(" ")
     .filter(Boolean)
     .map((num) => parseInt(num, 10));
 }
@@ -191,25 +199,25 @@ function parseAddressList(data: string): ImapAddress[] {
     // First, let's extract each address group (each enclosed in parentheses)
 
     // Simple approach for a single address
-    if (data.startsWith('((') && data.endsWith('))')) {
+    if (data.startsWith("((") && data.endsWith("))")) {
       // Extract the inner content
       const innerContent = data.substring(2, data.length - 2);
 
       // Split by space, but handle quoted strings
       const parts: string[] = [];
-      let currentPart = '';
+      let currentPart = "";
       let inQuote = false;
 
       for (let i = 0; i < innerContent.length; i++) {
         const char = innerContent[i];
 
-        if (char === '"' && (i === 0 || innerContent[i - 1] !== '\\')) {
+        if (char === '"' && (i === 0 || innerContent[i - 1] !== "\\")) {
           inQuote = !inQuote;
           currentPart += char;
-        } else if (char === ' ' && !inQuote) {
+        } else if (char === " " && !inQuote) {
           if (currentPart) {
             parts.push(currentPart);
-            currentPart = '';
+            currentPart = "";
           }
         } else {
           currentPart += char;
@@ -222,7 +230,7 @@ function parseAddressList(data: string): ImapAddress[] {
 
       // Clean up the parts
       const cleanParts = parts.map((part) => {
-        if (part === 'NIL') return undefined;
+        if (part === "NIL") return undefined;
         // Remove surrounding quotes if present
         if (part.startsWith('"') && part.endsWith('"')) {
           return part.substring(1, part.length - 1);
@@ -243,10 +251,12 @@ function parseAddressList(data: string): ImapAddress[] {
       }
     } else {
       // Fallback to a more general approach for multiple addresses
-      console.warn('Using fallback address parsing for:', data);
+      console.warn("Using fallback address parsing for:", data);
 
       // Extract email parts using a simple heuristic
-      const emailMatch = data.match(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+      const emailMatch = data.match(
+        /([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/
+      );
       if (emailMatch) {
         addresses.push({
           mailbox: emailMatch[1],
@@ -255,13 +265,13 @@ function parseAddressList(data: string): ImapAddress[] {
       }
     }
   } catch (error) {
-    console.warn('Error parsing address list:', error);
+    console.warn("Error parsing address list:", error);
 
     // Add a fallback address if parsing fails
     addresses.push({
-      name: 'Unknown',
-      mailbox: 'unknown',
-      host: 'example.com',
+      name: "Unknown",
+      mailbox: "unknown",
+      host: "example.com",
     });
   }
 
@@ -282,7 +292,7 @@ export function parseEnvelope(data: string): ImapEnvelope {
     const match = data.match(/^\((.*)\)$/);
 
     if (!match) {
-      throw new ImapParseError('Invalid envelope format', data);
+      throw new ImapParseError("Invalid envelope format", data);
     }
 
     // Split the envelope data into its components
@@ -292,7 +302,7 @@ export function parseEnvelope(data: string): ImapEnvelope {
     if (parts.length >= 10) {
       // Remove quotes from string values
       const cleanString = (str: string): string | undefined => {
-        if (str === 'NIL') return undefined;
+        if (str === "NIL") return undefined;
         // Remove surrounding quotes if present
         if (str.startsWith('"') && str.endsWith('"')) {
           return str.substring(1, str.length - 1);
@@ -304,26 +314,28 @@ export function parseEnvelope(data: string): ImapEnvelope {
       envelope.subject = cleanString(parts[1]);
 
       // Parse address lists
-      if (parts[2] !== 'NIL') envelope.from = parseAddressList(parts[2]);
-      if (parts[3] !== 'NIL') envelope.sender = parseAddressList(parts[3]);
-      if (parts[4] !== 'NIL') envelope.replyTo = parseAddressList(parts[4]);
-      if (parts[5] !== 'NIL') envelope.to = parseAddressList(parts[5]);
-      if (parts[6] !== 'NIL') envelope.cc = parseAddressList(parts[6]);
-      if (parts[7] !== 'NIL') envelope.bcc = parseAddressList(parts[7]);
+      if (parts[2] !== "NIL") envelope.from = parseAddressList(parts[2]);
+      if (parts[3] !== "NIL") envelope.sender = parseAddressList(parts[3]);
+      if (parts[4] !== "NIL") envelope.replyTo = parseAddressList(parts[4]);
+      if (parts[5] !== "NIL") envelope.to = parseAddressList(parts[5]);
+      if (parts[6] !== "NIL") envelope.cc = parseAddressList(parts[6]);
+      if (parts[7] !== "NIL") envelope.bcc = parseAddressList(parts[7]);
 
       envelope.inReplyTo = cleanString(parts[8]);
       envelope.messageId = cleanString(parts[9]);
     }
   } catch (error) {
-    console.warn('Error parsing envelope:', error);
+    console.warn("Error parsing envelope:", error);
 
     // Provide a fallback with basic information
-    envelope.subject = 'Subject parsing failed';
-    envelope.from = [{
-      name: 'Unknown Sender',
-      mailbox: 'unknown',
-      host: 'example.com',
-    }];
+    envelope.subject = "Subject parsing failed";
+    envelope.from = [
+      {
+        name: "Unknown Sender",
+        mailbox: "unknown",
+        host: "example.com",
+      },
+    ];
   }
 
   return envelope;
@@ -336,26 +348,26 @@ export function parseEnvelope(data: string): ImapEnvelope {
  */
 function parseListItems(data: string): string[] {
   const result: string[] = [];
-  let current = '';
+  let current = "";
   let inQuote = false;
   let inParentheses = 0;
 
   for (let i = 0; i < data.length; i++) {
     const char = data[i];
 
-    if (char === '"' && data[i - 1] !== '\\') {
+    if (char === '"' && data[i - 1] !== "\\") {
       inQuote = !inQuote;
       current += char;
-    } else if (char === '(' && !inQuote) {
+    } else if (char === "(" && !inQuote) {
       inParentheses++;
       current += char;
-    } else if (char === ')' && !inQuote) {
+    } else if (char === ")" && !inQuote) {
       inParentheses--;
       current += char;
-    } else if (char === ' ' && !inQuote && inParentheses === 0) {
+    } else if (char === " " && !inQuote && inParentheses === 0) {
       if (current) {
         result.push(current);
-        current = '';
+        current = "";
       }
     } else {
       current += char;
@@ -379,10 +391,10 @@ export function parseBodyStructure(data: string): ImapBodyStructure {
   // A real implementation would use a proper IMAP parser
 
   return {
-    type: 'text',
-    subtype: 'plain',
+    type: "text",
+    subtype: "plain",
     parameters: {},
-    encoding: '7BIT',
+    encoding: "7BIT",
     size: 0,
   };
 }
@@ -409,71 +421,76 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
     }
 
     // Extract other message data from the first line
-    if (firstLine.includes('FLAGS')) {
+    if (firstLine.includes("FLAGS")) {
       const flagsMatch = firstLine.match(/FLAGS \(([^)]*)\)/i);
       if (flagsMatch) {
-        const flags = flagsMatch[1].split(' ')
+        const flags = flagsMatch[1]
+          .split(" ")
           .filter(Boolean)
-          .map((flag) => flag.replace(/^\\/, '')); // Remove leading backslash
+          .map((flag) => flag.replace(/^\\/, "")); // Remove leading backslash
         result.flags = flags;
       }
     }
 
-    if (firstLine.includes('UID')) {
+    if (firstLine.includes("UID")) {
       const uidMatch = firstLine.match(/UID (\d+)/i);
       if (uidMatch) {
         result.uid = parseInt(uidMatch[1], 10);
       }
     }
 
-    if (firstLine.includes('RFC822.SIZE')) {
+    if (firstLine.includes("RFC822.SIZE")) {
       const sizeMatch = firstLine.match(/RFC822\.SIZE (\d+)/i);
       if (sizeMatch) {
         result.size = parseInt(sizeMatch[1], 10);
       }
     }
 
-    if (firstLine.includes('INTERNALDATE')) {
+    if (firstLine.includes("INTERNALDATE")) {
       const dateMatch = firstLine.match(/INTERNALDATE "([^"]+)"/i);
       if (dateMatch) {
         try {
           result.internalDate = new Date(dateMatch[1]);
         } catch (error) {
-          console.warn('Failed to parse internal date:', error);
+          console.warn("Failed to parse internal date:", error);
         }
       }
     }
 
-    if (firstLine.includes('ENVELOPE')) {
-      const envelopeRegex = /ENVELOPE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
+    if (firstLine.includes("ENVELOPE")) {
+      const envelopeRegex =
+        /ENVELOPE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
       const envelopeMatch = firstLine.match(envelopeRegex);
       if (envelopeMatch) {
         try {
           result.envelope = parseEnvelope(`(${envelopeMatch[1]})`);
         } catch (error) {
-          console.warn('Failed to parse envelope:', error);
+          console.warn("Failed to parse envelope:", error);
 
           // Provide a fallback with basic information
           result.envelope = {
-            subject: 'Subject parsing failed',
-            from: [{
-              name: 'Unknown Sender',
-              mailbox: 'unknown',
-              host: 'example.com',
-            }],
+            subject: "Subject parsing failed",
+            from: [
+              {
+                name: "Unknown Sender",
+                mailbox: "unknown",
+                host: "example.com",
+              },
+            ],
           };
         }
       }
     }
 
-    if (firstLine.includes('BODYSTRUCTURE')) {
-      const bodyRegex = /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
+    if (firstLine.includes("BODYSTRUCTURE")) {
+      const bodyRegex =
+        /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
       const bodyMatch = firstLine.match(bodyRegex);
       if (bodyMatch) {
         try {
           result.bodyStructure = parseBodyStructure(`(${bodyMatch[1]})`);
         } catch (error) {
-          console.warn('Failed to parse body structure:', error);
+          console.warn("Failed to parse body structure:", error);
         }
       }
     }
@@ -485,16 +502,16 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         sectionData.push(line);
 
         // Check if we've collected all the data for this section
-        const collectedData = sectionData.join('\r\n');
+        const collectedData = sectionData.join("\r\n");
         if (collectedData.length >= sectionSize) {
           // Process the collected data
           if (currentSection) {
-            if (currentSection === 'HEADER') {
+            if (currentSection === "HEADER") {
               // Parse headers
               result.headers = parseHeaders(sectionData);
-            } else if (currentSection === 'FULL') {
+            } else if (currentSection === "FULL") {
               // Store the full message as raw
-              const textData = sectionData.join('\r\n');
+              const textData = sectionData.join("\r\n");
               const encoder = new TextEncoder();
               result.raw = encoder.encode(textData);
 
@@ -504,15 +521,15 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
               }
 
               // Simple parsing to extract body from raw message
-              const parts = textData.split('\r\n\r\n');
+              const parts = textData.split("\r\n\r\n");
               if (parts.length > 1) {
                 // Everything after the first empty line is the body
-                const bodyText = parts.slice(1).join('\r\n\r\n');
+                const bodyText = parts.slice(1).join("\r\n\r\n");
                 const encoder = new TextEncoder();
-                (result.parts as Record<string, any>)['TEXT'] = {
+                (result.parts as Record<string, unknown>)["TEXT"] = {
                   data: encoder.encode(bodyText),
                   size: bodyText.length,
-                  type: 'text/plain', // Default type
+                  type: "text/plain", // Default type
                 };
               }
             } else {
@@ -522,12 +539,12 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
               }
 
               // Convert the array of strings to a Uint8Array
-              const textData = sectionData.join('\r\n');
+              const textData = sectionData.join("\r\n");
               const encoder = new TextEncoder();
-              (result.parts as Record<string, any>)[currentSection] = {
+              (result.parts as Record<string, unknown>)[currentSection] = {
                 data: encoder.encode(textData),
                 size: textData.length,
-                type: 'text/plain', // Default type
+                type: "text/plain", // Default type
               };
             }
           }
@@ -557,7 +574,7 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         const section = inlineBodyMatch[1];
         const content = inlineBodyMatch[2];
 
-        if (section === 'HEADER') {
+        if (section === "HEADER") {
           // Parse headers from inline content
           result.headers = parseHeaders([content]);
         } else {
@@ -568,10 +585,10 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
 
           // Convert the string to a Uint8Array
           const encoder = new TextEncoder();
-          (result.parts as Record<string, any>)[section] = {
+          (result.parts as Record<string, unknown>)[section] = {
             data: encoder.encode(content),
             size: content.length,
-            type: 'text/plain', // Default type
+            type: "text/plain", // Default type
           };
         }
       }
@@ -580,7 +597,7 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
       const fullBodyMatch = line.match(/BODY\[\] \{(\d+)\}/i);
       if (fullBodyMatch) {
         sectionSize = parseInt(fullBodyMatch[1], 10);
-        currentSection = 'FULL';
+        currentSection = "FULL";
         inSection = true;
         sectionData = [];
         continue;
@@ -589,14 +606,12 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
 
     // Process any remaining section data
     if (inSection && currentSection && sectionData.length > 0) {
-      const collectedData = sectionData.join('\r\n');
-
-      if (currentSection === 'HEADER') {
+      if (currentSection === "HEADER") {
         // Parse headers
         result.headers = parseHeaders(sectionData);
-      } else if (currentSection === 'FULL') {
+      } else if (currentSection === "FULL") {
         // Store the full message as raw
-        const textData = sectionData.join('\r\n');
+        const textData = sectionData.join("\r\n");
         const encoder = new TextEncoder();
         result.raw = encoder.encode(textData);
 
@@ -606,15 +621,15 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         }
 
         // Simple parsing to extract body from raw message
-        const parts = textData.split('\r\n\r\n');
+        const parts = textData.split("\r\n\r\n");
         if (parts.length > 1) {
           // Everything after the first empty line is the body
-          const bodyText = parts.slice(1).join('\r\n\r\n');
+          const bodyText = parts.slice(1).join("\r\n\r\n");
           const encoder = new TextEncoder();
-          (result.parts as Record<string, any>)['TEXT'] = {
+          (result.parts as Record<string, unknown>)["TEXT"] = {
             data: encoder.encode(bodyText),
             size: bodyText.length,
-            type: 'text/plain', // Default type
+            type: "text/plain", // Default type
           };
         }
       } else {
@@ -624,17 +639,17 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
         }
 
         // Convert the array of strings to a Uint8Array
-        const textData = sectionData.join('\r\n');
+        const textData = sectionData.join("\r\n");
         const encoder = new TextEncoder();
-        (result.parts as Record<string, any>)[currentSection] = {
+        (result.parts as Record<string, unknown>)[currentSection] = {
           data: encoder.encode(textData),
           size: textData.length,
-          type: 'text/plain', // Default type
+          type: "text/plain", // Default type
         };
       }
     }
   } catch (error) {
-    console.warn('Error parsing fetch response:', error);
+    console.warn("Error parsing fetch response:", error);
   }
 
   return result;
@@ -645,13 +660,13 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
  * @param headerLines Array of header lines
  * @returns Object with header names as keys and values as values
  */
-function parseHeaders(headerLines: string[]): Record<string, string | string[]> {
+function parseHeaders(
+  headerLines: string[]
+): Record<string, string | string[]> {
   const headers: Record<string, string | string[]> = {};
-  let currentHeader = '';
-  let currentValue = '';
 
   // Join all lines with proper line breaks
-  const headerText = headerLines.join('\r\n');
+  const headerText = headerLines.join("\r\n");
 
   // Split into individual header entries
   const headerEntries = headerText.split(/\r\n(?!\s)/);
@@ -663,7 +678,7 @@ function parseHeaders(headerLines: string[]): Record<string, string | string[]> 
     const match = entry.match(/^([^:]+):\s*(.*(?:\r\n\s+.*)*)/);
     if (match) {
       const name = match[1].trim();
-      const value = match[2].replace(/\r\n\s+/g, ' ').trim();
+      const value = match[2].replace(/\r\n\s+/g, " ").trim();
 
       // Some headers can appear multiple times
       if (headers[name]) {

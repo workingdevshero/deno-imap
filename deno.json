@@ -20,5 +20,8 @@
     "indentWidth": 2,
     "singleQuote": true,
     "lineWidth": 100
+  },
+  "lint": {
+    "exclude": ["test/", "**/*_test.ts"]
   }
 }
