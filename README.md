@@ -249,7 +249,8 @@ Determines if a message has attachments based on its body structure.
 hasAttachments(bodyStructure: ImapBodyStructure): boolean
 ```
 
-This function analyzes the body structure of an email message to determine if it contains attachments. It considers the following criteria:
+This function analyzes the body structure of an email message to determine if it contains
+attachments. It considers the following criteria:
 
 - Parts with explicit `ATTACHMENT` disposition
 - Parts with `INLINE` disposition that have a filename
@@ -267,7 +268,7 @@ const messages = await client.fetch('1:*', {
 
 // Find messages with attachments
 const messagesWithAttachments = messages.filter(
-  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure)
+  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
 );
 
 console.log(`Found ${messagesWithAttachments.length} messages with attachments`);
@@ -295,20 +296,21 @@ const fetchResult = await client.fetch(`${message.seq}`, {
   bodyParts: [attachment.section],
 });
 
-if (fetchResult.length > 0 && 
-    fetchResult[0].parts && 
-    fetchResult[0].parts[attachment.section]) {
-  
+if (
+  fetchResult.length > 0 &&
+  fetchResult[0].parts &&
+  fetchResult[0].parts[attachment.section]
+) {
   const attachmentData = fetchResult[0].parts[attachment.section];
-  
+
   // Decode the attachment based on its encoding
   const decodedData = decodeAttachment(
     attachmentData.data as Uint8Array,
-    attachment.encoding
+    attachment.encoding,
   );
-  
+
   // Save the attachment to a file
-  await Deno.writeFile("path/to/save/" + attachment.filename, decodedData);
+  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
 }
 ```
 
@@ -325,7 +327,9 @@ The [examples](./examples) directory contains sample code demonstrating how to u
   renaming, and deleting them.
 - [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching
   message content, and manipulating messages.
-- [Attachments Example](./examples/attachments.ts): Demonstrates how to find messages with attachments, fetch attachment data, properly decode it based on the encoding (BASE64, QUOTED-PRINTABLE, etc.), and save attachments to a local folder.
+- [Attachments Example](./examples/attachments.ts): Demonstrates how to find messages with
+  attachments, fetch attachment data, properly decode it based on the encoding (BASE64,
+  QUOTED-PRINTABLE, etc.), and save attachments to a local folder.
 
 To run the examples, create a `.env` file with your IMAP server details, then run:
 
@@ -358,7 +362,7 @@ The library provides utilities for working with email attachments:
 Use the `hasAttachments` function to determine if a message has attachments:
 
 ```typescript
-import { ImapClient, hasAttachments } from 'jsr:@workingdevshero/deno-imap';
+import { hasAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
 
 // Fetch messages with their body structure
 const messages = await client.fetch('1:*', {
@@ -367,7 +371,7 @@ const messages = await client.fetch('1:*', {
 
 // Find messages with attachments
 const messagesWithAttachments = messages.filter(
-  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure)
+  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
 );
 ```
 
@@ -376,12 +380,12 @@ const messagesWithAttachments = messages.filter(
 The `findAttachments` function extracts detailed information about attachments:
 
 ```typescript
-import { ImapClient, findAttachments } from 'jsr:@workingdevshero/deno-imap';
+import { findAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
 
 // Get attachment details from a message's body structure
 if (message.bodyStructure) {
   const attachments = findAttachments(message.bodyStructure);
-  
+
   for (const attachment of attachments) {
     console.log(`Filename: ${attachment.filename}`);
     console.log(`Type: ${attachment.type}/${attachment.subtype}`);
@@ -404,24 +408,26 @@ const fetchResult = await client.fetch(`${message.seq}`, {
   bodyParts: [attachment.section],
 });
 
-if (fetchResult.length > 0 && 
-    fetchResult[0].parts && 
-    fetchResult[0].parts[attachment.section]) {
-  
+if (
+  fetchResult.length > 0 &&
+  fetchResult[0].parts &&
+  fetchResult[0].parts[attachment.section]
+) {
   const attachmentData = fetchResult[0].parts[attachment.section];
-  
+
   // Decode the attachment based on its encoding
   const decodedData = decodeAttachment(
     attachmentData.data as Uint8Array,
-    attachment.encoding
+    attachment.encoding,
   );
-  
+
   // Save the attachment to a file
-  await Deno.writeFile("path/to/save/" + attachment.filename, decodedData);
+  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
 }
 ```
 
-The `decodeAttachment` function handles different encoding types (BASE64, QUOTED-PRINTABLE, 7BIT, 8BIT, BINARY) automatically.
+The `decodeAttachment` function handles different encoding types (BASE64, QUOTED-PRINTABLE, 7BIT,
+8BIT, BINARY) automatically.
 
 For a complete implementation, see the [Attachments Example](./examples/attachments.ts).
 

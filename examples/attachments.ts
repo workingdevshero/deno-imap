@@ -10,26 +10,21 @@
  * 4. Save attachments to a local folder
  */
 
-import { ensureDir } from "https://deno.land/std/fs/mod.ts";
-import { join } from "https://deno.land/std/path/mod.ts";
-import { 
-  ImapClient, 
-  findAttachments, 
-  hasAttachments,
-  decodeAttachment
-} from "../mod.ts";
+import { ensureDir } from 'https://deno.land/std/fs/mod.ts';
+import { join } from 'https://deno.land/std/path/mod.ts';
+import { decodeAttachment, findAttachments, hasAttachments, ImapClient } from '../mod.ts';
 
 // Create a client using environment variables
 const client = new ImapClient({
-  host: Deno.env.get("IMAP_HOST")!,
-  port: parseInt(Deno.env.get("IMAP_PORT")!),
-  tls: Deno.env.get("IMAP_USE_TLS") !== "false",
-  username: Deno.env.get("IMAP_USERNAME")!,
-  password: Deno.env.get("IMAP_PASSWORD")!,
+  host: Deno.env.get('IMAP_HOST')!,
+  port: parseInt(Deno.env.get('IMAP_PORT')!),
+  tls: Deno.env.get('IMAP_USE_TLS') !== 'false',
+  username: Deno.env.get('IMAP_USERNAME')!,
+  password: Deno.env.get('IMAP_PASSWORD')!,
 });
 
 // Define the attachments folder path
-const ATTACHMENTS_FOLDER = join(Deno.cwd(), "attachments");
+const ATTACHMENTS_FOLDER = join(Deno.cwd(), 'attachments');
 
 try {
   // Create the attachments folder if it doesn't exist
@@ -39,10 +34,10 @@ try {
   // Connect and authenticate
   await client.connect();
   await client.authenticate();
-  console.log("Connected and authenticated successfully");
+  console.log('Connected and authenticated successfully');
 
   // Select the INBOX
-  const inbox = await client.selectMailbox("INBOX");
+  const inbox = await client.selectMailbox('INBOX');
   console.log(`INBOX has ${inbox.exists} messages`);
 
   // Determine how many messages to fetch (up to 20)
@@ -50,16 +45,18 @@ try {
   const fetchCount = Math.min(messageCount, 20);
 
   if (fetchCount === 0) {
-    console.log("No messages in INBOX");
+    console.log('No messages in INBOX');
     client.disconnect();
     Deno.exit(0);
   }
 
   // Fetch the most recent messages with their body structure
-  const fetchRange = `${Math.max(
-    1,
-    messageCount - fetchCount + 1
-  )}:${messageCount}`;
+  const fetchRange = `${
+    Math.max(
+      1,
+      messageCount - fetchCount + 1,
+    )
+  }:${messageCount}`;
   console.log(`Fetching ${fetchCount} most recent messages (${fetchRange})...`);
 
   const messages = await client.fetch(fetchRange, {
@@ -71,34 +68,34 @@ try {
 
   // Find messages with attachments
   const messagesWithAttachments = messages.filter(
-    (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure)
+    (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
   );
 
   console.log(
-    `\nFound ${messagesWithAttachments.length} messages with attachments:`
+    `\nFound ${messagesWithAttachments.length} messages with attachments:`,
   );
 
   // Process each message with attachments
   for (const message of messagesWithAttachments) {
     console.log(
-      `\nMessage #${message.seq} - ${message.envelope?.subject || "No subject"}`
+      `\nMessage #${message.seq} - ${message.envelope?.subject || 'No subject'}`,
     );
     console.log(
-      `From: ${message.envelope?.from?.[0]?.mailbox}@${message.envelope?.from?.[0]?.host}`
+      `From: ${message.envelope?.from?.[0]?.mailbox}@${message.envelope?.from?.[0]?.host}`,
     );
     console.log(`Date: ${message.envelope?.date}`);
 
     // Find attachment details using the findAttachments function
     if (message.bodyStructure) {
       const attachmentInfo = findAttachments(message.bodyStructure);
-      console.log("Attachments:");
+      console.log('Attachments:');
 
       for (const attachment of attachmentInfo) {
         console.log(
-          `- ${attachment.filename} (${attachment.type}/${attachment.subtype}, ${attachment.size} bytes)`
+          `- ${attachment.filename} (${attachment.type}/${attachment.subtype}, ${attachment.size} bytes)`,
         );
         console.log(
-          `  Section: ${attachment.section}, Encoding: ${attachment.encoding}`
+          `  Section: ${attachment.section}, Encoding: ${attachment.encoding}`,
         );
       }
 
@@ -119,14 +116,14 @@ try {
           ) {
             const attachmentData = fetchResult[0].parts[attachment.section];
             console.log(
-              `Successfully fetched attachment (${attachmentData.size} bytes)`
+              `Successfully fetched attachment (${attachmentData.size} bytes)`,
             );
             console.log(`Encoding: ${attachment.encoding}`);
 
             // Decode the attachment data based on its encoding
             const decodedData = decodeAttachment(
               attachmentData.data as Uint8Array,
-              attachment.encoding
+              attachment.encoding,
             );
 
             console.log(`Decoded data size: ${decodedData.length} bytes`);
@@ -138,32 +135,32 @@ try {
 
             // For text-based attachments, show a preview
             if (
-              attachment.type === "TEXT" ||
-              (attachment.type === "APPLICATION" &&
-                (attachment.subtype === "JSON" ||
-                  attachment.subtype === "XML" ||
-                  attachment.subtype === "JAVASCRIPT"))
+              attachment.type === 'TEXT' ||
+              (attachment.type === 'APPLICATION' &&
+                (attachment.subtype === 'JSON' ||
+                  attachment.subtype === 'XML' ||
+                  attachment.subtype === 'JAVASCRIPT'))
             ) {
               const decoder = new TextDecoder();
               const content = decoder.decode(decodedData);
-              console.log("\nPreview of attachment content:");
+              console.log('\nPreview of attachment content:');
               console.log(
-                content.substring(0, 200) + (content.length > 200 ? "..." : "")
+                content.substring(0, 200) + (content.length > 200 ? '...' : ''),
               );
             } else {
               console.log(
-                `Binary attachment of type ${attachment.type}/${attachment.subtype} saved successfully.`
+                `Binary attachment of type ${attachment.type}/${attachment.subtype} saved successfully.`,
               );
             }
           } else {
             console.log(
-              "Failed to fetch attachment data. The attachment might be empty or inaccessible."
+              'Failed to fetch attachment data. The attachment might be empty or inaccessible.',
             );
           }
         } catch (error) {
           console.error(
-            "Error fetching attachment:",
-            error instanceof Error ? error.message : String(error)
+            'Error fetching attachment:',
+            error instanceof Error ? error.message : String(error),
           );
         }
       }
@@ -172,18 +169,18 @@ try {
 
   // If no messages with attachments were found
   if (messagesWithAttachments.length === 0) {
-    console.log("\nNo messages with attachments found in the fetched range.");
+    console.log('\nNo messages with attachments found in the fetched range.');
     console.log(
-      "Try sending yourself an email with an attachment to test this example."
+      'Try sending yourself an email with an attachment to test this example.',
     );
   }
 } catch (error: unknown) {
   console.error(
-    "Error:",
-    error instanceof Error ? error.message : String(error)
+    'Error:',
+    error instanceof Error ? error.message : String(error),
   );
 } finally {
   // Always disconnect
   await client.disconnect();
-  console.log("Disconnected");
+  console.log('Disconnected');
 }

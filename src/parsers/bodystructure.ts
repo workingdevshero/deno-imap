@@ -1,12 +1,12 @@
 /**
  * IMAP BODYSTRUCTURE Parser
- * 
+ *
  * This module provides an improved parser for IMAP BODYSTRUCTURE responses,
  * with better handling of complex multipart structures and attachments.
  */
 
-import type { ImapBodyStructure } from "../types/mod.ts";
-import { ImapParseError } from "../errors.ts";
+import type { ImapBodyStructure } from '../types/mod.ts';
+import { ImapParseError } from '../errors.ts';
 
 /**
  * Parses a body structure response
@@ -16,7 +16,7 @@ import { ImapParseError } from "../errors.ts";
 export function parseBodyStructure(data: string): ImapBodyStructure {
   try {
     // Remove outer parentheses if present
-    if (data.startsWith("(") && data.endsWith(")")) {
+    if (data.startsWith('(') && data.endsWith(')')) {
       data = data.substring(1, data.length - 1);
     }
 
@@ -28,14 +28,14 @@ export function parseBodyStructure(data: string): ImapBodyStructure {
     // Parse as a simple part
     return parseSimplePart(data);
   } catch (error) {
-    console.warn("Error parsing body structure:", error);
-    
+    console.warn('Error parsing body structure:', error);
+
     // Return a default body structure if parsing fails
     return {
-      type: "TEXT",
-      subtype: "PLAIN",
+      type: 'TEXT',
+      subtype: 'PLAIN',
       parameters: {},
-      encoding: "7BIT",
+      encoding: '7BIT',
       size: 0,
     };
   }
@@ -47,27 +47,25 @@ export function parseBodyStructure(data: string): ImapBodyStructure {
 function isMultipartStructure(data: string): boolean {
   // Multipart structures start with a nested part (parenthesis)
   // and typically contain a subtype like "mixed" or "alternative"
-  
+
   // Check if this is a multipart structure by looking for common patterns
-  
+
   // Pattern 1: Starts with a nested part and contains a multipart subtype
-  const hasMultipartSubtype = 
-    data.includes('"mixed"') || 
-    data.includes('"alternative"') || 
-    data.includes('"related"') || 
-    data.includes('"digest"') || 
-    data.includes('"report"') || 
-    data.includes('"signed"') || 
+  const hasMultipartSubtype = data.includes('"mixed"') ||
+    data.includes('"alternative"') ||
+    data.includes('"related"') ||
+    data.includes('"digest"') ||
+    data.includes('"report"') ||
+    data.includes('"signed"') ||
     data.includes('"encrypted"');
-  
+
   // Pattern 2: Starts with a nested part (parenthesis)
-  const startsWithNestedPart = 
-    (data.startsWith("(") && !data.startsWith("((")) ||
-    (data.startsWith("((") && hasMultipartSubtype);
-  
+  const startsWithNestedPart = (data.startsWith('(') && !data.startsWith('((')) ||
+    (data.startsWith('((') && hasMultipartSubtype);
+
   // Pattern 3: Contains multiple parts separated by space and ends with a subtype
   const hasMultipleParts = /^\([^)]+\)\s+\([^)]+\).*"[^"]+"/i.test(data);
-  
+
   return startsWithNestedPart || hasMultipleParts || hasMultipartSubtype;
 }
 
@@ -77,7 +75,7 @@ function isMultipartStructure(data: string): boolean {
 function parseMultipartStructure(data: string): ImapBodyStructure {
   // Find all child parts
   const parts: string[] = [];
-  let currentPart = "";
+  let currentPart = '';
   let depth = 0;
   let i = 0;
 
@@ -85,26 +83,26 @@ function parseMultipartStructure(data: string): ImapBodyStructure {
   while (i < data.length) {
     const char = data[i];
 
-    if (char === "(" && (i === 0 || data[i - 1] !== "\\")) {
+    if (char === '(' && (i === 0 || data[i - 1] !== '\\')) {
       depth++;
       currentPart += char;
-    } else if (char === ")" && (i === 0 || data[i - 1] !== "\\")) {
+    } else if (char === ')' && (i === 0 || data[i - 1] !== '\\')) {
       depth--;
       currentPart += char;
 
       if (depth === 0) {
         parts.push(currentPart);
-        currentPart = "";
-        
+        currentPart = '';
+
         // Skip whitespace
         i++;
-        while (i < data.length && data[i] === " ") i++;
-        
+        while (i < data.length && data[i] === ' ') i++;
+
         // If we're at a quote, this is likely the multipart subtype
         if (i < data.length && data[i] === '"') {
           break;
         }
-        
+
         continue;
       }
     } else {
@@ -114,54 +112,58 @@ function parseMultipartStructure(data: string): ImapBodyStructure {
   }
 
   // Extract subtype and parameters from the remaining data
-  let subtype = "MIXED"; // Default subtype
+  let subtype = 'MIXED'; // Default subtype
   const parameters: Record<string, string> = {};
-  
+
   // Extract the remaining data after the parts
   const remainingData = data.substring(i);
-  
+
   // Extract the subtype (should be in quotes)
   const subtypeMatch = remainingData.match(/"([^"]+)"/);
   if (subtypeMatch) {
     subtype = subtypeMatch[1].toUpperCase();
-    
+
     // Look for parameters after the subtype
-    const paramsMatch = remainingData.substring(remainingData.indexOf(subtypeMatch[0]) + subtypeMatch[0].length).match(/\(([^)]*)\)/);
+    const paramsMatch = remainingData.substring(
+      remainingData.indexOf(subtypeMatch[0]) + subtypeMatch[0].length,
+    ).match(/\(([^)]*)\)/);
     if (paramsMatch) {
       try {
         const paramParts = parseListItems(paramsMatch[1]);
         for (let i = 0; i < paramParts.length; i += 2) {
           if (i + 1 < paramParts.length) {
-            const key = parseStringValue(paramParts[i]) || "";
-            const value = parseStringValue(paramParts[i + 1]) || "";
+            const key = parseStringValue(paramParts[i]) || '';
+            const value = parseStringValue(paramParts[i + 1]) || '';
             if (key) {
               parameters[key.toUpperCase()] = value;
             }
           }
         }
       } catch (error) {
-        console.warn("Error parsing multipart parameters:", error);
+        console.warn('Error parsing multipart parameters:', error);
       }
     }
   }
-  
+
   // Create the multipart body structure
   const bodyStructure: ImapBodyStructure = {
-    type: "MULTIPART",
+    type: 'MULTIPART',
     subtype: subtype,
     parameters: parameters,
-    encoding: "7BIT", // Default encoding for multipart
+    encoding: '7BIT', // Default encoding for multipart
     size: 0, // Size is the sum of all parts
     childParts: [],
   };
-  
+
   // Try to extract disposition, language, and location from the remaining data
   const dispositionMatch = remainingData.match(/\("([^"]+)"([^)]*)\)/);
-  if (dispositionMatch && 
-      (dispositionMatch[1].toUpperCase() === "ATTACHMENT" || 
-       dispositionMatch[1].toUpperCase() === "INLINE")) {
+  if (
+    dispositionMatch &&
+    (dispositionMatch[1].toUpperCase() === 'ATTACHMENT' ||
+      dispositionMatch[1].toUpperCase() === 'INLINE')
+  ) {
     bodyStructure.dispositionType = dispositionMatch[1].toUpperCase();
-    
+
     // Try to extract disposition parameters
     if (dispositionMatch[2]) {
       const dispParamsMatch = dispositionMatch[2].match(/\(([^)]*)\)/);
@@ -171,8 +173,8 @@ function parseMultipartStructure(data: string): ImapBodyStructure {
           const paramParts = parseListItems(dispParamsMatch[1]);
           for (let i = 0; i < paramParts.length; i += 2) {
             if (i + 1 < paramParts.length) {
-              const key = parseStringValue(paramParts[i]) || "";
-              const value = parseStringValue(paramParts[i + 1]) || "";
+              const key = parseStringValue(paramParts[i]) || '';
+              const value = parseStringValue(paramParts[i + 1]) || '';
               if (key) {
                 dispParams[key.toUpperCase()] = value;
               }
@@ -180,25 +182,25 @@ function parseMultipartStructure(data: string): ImapBodyStructure {
           }
           bodyStructure.dispositionParameters = dispParams;
         } catch (error) {
-          console.warn("Error parsing multipart disposition parameters:", error);
+          console.warn('Error parsing multipart disposition parameters:', error);
         }
       }
     }
   }
-  
+
   // Parse each child part
   for (const part of parts) {
     try {
       const childPart = parseBodyStructure(part);
       bodyStructure.childParts!.push(childPart);
-      
+
       // Add to the total size
       bodyStructure.size += childPart.size;
     } catch (error) {
-      console.warn("Error parsing child part:", error);
+      console.warn('Error parsing child part:', error);
     }
   }
-  
+
   return bodyStructure;
 }
 
@@ -211,7 +213,7 @@ function parseSimplePart(data: string): ImapBodyStructure {
 
   // Basic validation
   if (parts.length < 7) {
-    throw new ImapParseError("Invalid body structure format", data);
+    throw new ImapParseError('Invalid body structure format', data);
   }
 
   // Extract the basic fields
@@ -225,10 +227,10 @@ function parseSimplePart(data: string): ImapBodyStructure {
 
   // Create the body structure object
   const bodyStructure: ImapBodyStructure = {
-    type: type?.toUpperCase() || "TEXT",
-    subtype: subtype?.toUpperCase() || "PLAIN",
+    type: type?.toUpperCase() || 'TEXT',
+    subtype: subtype?.toUpperCase() || 'PLAIN',
     parameters: parameters || {},
-    encoding: encoding?.toUpperCase() || "7BIT",
+    encoding: encoding?.toUpperCase() || '7BIT',
     size: isNaN(size) ? 0 : size,
   };
 
@@ -237,22 +239,24 @@ function parseSimplePart(data: string): ImapBodyStructure {
   if (description) bodyStructure.description = description;
 
   // For text parts, the next field is the number of lines
-  if (type?.toUpperCase() === "TEXT" && parts.length > 7) {
+  if (type?.toUpperCase() === 'TEXT' && parts.length > 7) {
     const lines = parseInt(parts[7], 10);
     if (!isNaN(lines)) bodyStructure.lines = lines;
   }
 
   // For message/rfc822 parts, the next fields are envelope, body structure, and lines
-  if (type?.toUpperCase() === "MESSAGE" && subtype?.toUpperCase() === "RFC822" && parts.length > 10) {
+  if (
+    type?.toUpperCase() === 'MESSAGE' && subtype?.toUpperCase() === 'RFC822' && parts.length > 10
+  ) {
     try {
       // Parse envelope
-      if (parts[7] !== "NIL") {
+      if (parts[7] !== 'NIL') {
         // We'll need to import the envelope parser for this
         // bodyStructure.envelope = parseEnvelope(parts[7]);
       }
 
       // Parse nested body structure
-      if (parts[8] !== "NIL") {
+      if (parts[8] !== 'NIL') {
         bodyStructure.messageBodyStructure = parseBodyStructure(parts[8]);
       }
 
@@ -260,57 +264,60 @@ function parseSimplePart(data: string): ImapBodyStructure {
       const lines = parseInt(parts[9], 10);
       if (!isNaN(lines)) bodyStructure.lines = lines;
     } catch (error) {
-      console.warn("Error parsing message/rfc822 body structure:", error);
+      console.warn('Error parsing message/rfc822 body structure:', error);
     }
   }
 
   // Parse extension data if present (MD5, disposition, language, location)
-  let extensionIndex = type?.toUpperCase() === "TEXT" ? 8 : 
-                       (type?.toUpperCase() === "MESSAGE" && subtype?.toUpperCase() === "RFC822") ? 10 : 7;
+  let extensionIndex = type?.toUpperCase() === 'TEXT'
+    ? 8
+    : (type?.toUpperCase() === 'MESSAGE' && subtype?.toUpperCase() === 'RFC822')
+    ? 10
+    : 7;
 
   if (parts.length > extensionIndex) {
     // MD5
-    if (parts[extensionIndex] !== "NIL") {
+    if (parts[extensionIndex] !== 'NIL') {
       bodyStructure.md5 = parseStringValue(parts[extensionIndex]);
     }
     extensionIndex++;
 
     // Disposition
-    if (parts.length > extensionIndex && parts[extensionIndex] !== "NIL") {
+    if (parts.length > extensionIndex && parts[extensionIndex] !== 'NIL') {
       try {
-        const dispositionParts = parseListItems(parts[extensionIndex].replace(/^\(|\)$/g, ""));
+        const dispositionParts = parseListItems(parts[extensionIndex].replace(/^\(|\)$/g, ''));
         if (dispositionParts.length >= 1) {
           bodyStructure.dispositionType = parseStringValue(dispositionParts[0])?.toUpperCase();
-          
+
           if (dispositionParts.length >= 2) {
             bodyStructure.dispositionParameters = parseParameterList(dispositionParts[1]);
           }
         }
       } catch (error) {
-        console.warn("Error parsing disposition:", error);
+        console.warn('Error parsing disposition:', error);
       }
     }
     extensionIndex++;
 
     // Language
-    if (parts.length > extensionIndex && parts[extensionIndex] !== "NIL") {
+    if (parts.length > extensionIndex && parts[extensionIndex] !== 'NIL') {
       try {
-        if (parts[extensionIndex].startsWith("(")) {
+        if (parts[extensionIndex].startsWith('(')) {
           // List of languages
-          const languageParts = parseListItems(parts[extensionIndex].replace(/^\(|\)$/g, ""));
+          const languageParts = parseListItems(parts[extensionIndex].replace(/^\(|\)$/g, ''));
           bodyStructure.language = languageParts.map(parseStringValue).filter(Boolean) as string[];
         } else {
           // Single language
           bodyStructure.language = parseStringValue(parts[extensionIndex]) || undefined;
         }
       } catch (error) {
-        console.warn("Error parsing language:", error);
+        console.warn('Error parsing language:', error);
       }
     }
     extensionIndex++;
 
     // Location
-    if (parts.length > extensionIndex && parts[extensionIndex] !== "NIL") {
+    if (parts.length > extensionIndex && parts[extensionIndex] !== 'NIL') {
       bodyStructure.location = parseStringValue(parts[extensionIndex]);
     }
   }
@@ -325,26 +332,26 @@ function parseSimplePart(data: string): ImapBodyStructure {
  */
 function parseListItems(data: string): string[] {
   const result: string[] = [];
-  let current = "";
+  let current = '';
   let inQuote = false;
   let inParentheses = 0;
 
   for (let i = 0; i < data.length; i++) {
     const char = data[i];
 
-    if (char === '"' && data[i - 1] !== "\\") {
+    if (char === '"' && data[i - 1] !== '\\') {
       inQuote = !inQuote;
       current += char;
-    } else if (char === "(" && !inQuote) {
+    } else if (char === '(' && !inQuote) {
       inParentheses++;
       current += char;
-    } else if (char === ")" && !inQuote) {
+    } else if (char === ')' && !inQuote) {
       inParentheses--;
       current += char;
-    } else if (char === " " && !inQuote && inParentheses === 0) {
+    } else if (char === ' ' && !inQuote && inParentheses === 0) {
       if (current) {
         result.push(current);
-        current = "";
+        current = '';
       }
     } else {
       current += char;
@@ -366,13 +373,13 @@ function parseListItems(data: string): string[] {
 function parseParameterList(data: string): Record<string, string> {
   const parameters: Record<string, string> = {};
 
-  if (data === "NIL" || !data) {
+  if (data === 'NIL' || !data) {
     return parameters;
   }
 
   try {
     // Remove outer parentheses if present
-    if (data.startsWith("(") && data.endsWith(")")) {
+    if (data.startsWith('(') && data.endsWith(')')) {
       data = data.substring(1, data.length - 1);
     }
 
@@ -386,12 +393,12 @@ function parseParameterList(data: string): Record<string, string> {
         const value = parseStringValue(parts[i + 1]);
 
         if (name) {
-          parameters[name.toUpperCase()] = value || "";
+          parameters[name.toUpperCase()] = value || '';
         }
       }
     }
   } catch (error) {
-    console.warn("Error parsing parameter list:", error);
+    console.warn('Error parsing parameter list:', error);
   }
 
   return parameters;
@@ -403,7 +410,7 @@ function parseParameterList(data: string): Record<string, string> {
  * @returns Parsed string or undefined
  */
 function parseStringValue(value: string): string | undefined {
-  if (!value || value === "NIL") {
+  if (!value || value === 'NIL') {
     return undefined;
   }
 
@@ -427,7 +434,7 @@ export function hasAttachments(bodyStructure: ImapBodyStructure): boolean {
   }
 
   // If this is a multipart message, check each child part
-  if (bodyStructure.type === "MULTIPART" && bodyStructure.childParts) {
+  if (bodyStructure.type === 'MULTIPART' && bodyStructure.childParts) {
     for (const part of bodyStructure.childParts) {
       if (hasAttachments(part)) {
         return true;
@@ -436,9 +443,11 @@ export function hasAttachments(bodyStructure: ImapBodyStructure): boolean {
   }
 
   // If this is a message/rfc822, check its nested body structure
-  if (bodyStructure.type === "MESSAGE" && 
-      bodyStructure.subtype === "RFC822" && 
-      bodyStructure.messageBodyStructure) {
+  if (
+    bodyStructure.type === 'MESSAGE' &&
+    bodyStructure.subtype === 'RFC822' &&
+    bodyStructure.messageBodyStructure
+  ) {
     return hasAttachments(bodyStructure.messageBodyStructure);
   }
 
@@ -452,22 +461,26 @@ export function hasAttachments(bodyStructure: ImapBodyStructure): boolean {
  */
 function isAttachment(part: ImapBodyStructure): boolean {
   // Check for explicit attachment disposition
-  if (part.dispositionType === "ATTACHMENT") {
+  if (part.dispositionType === 'ATTACHMENT') {
     return true;
   }
 
   // Check for inline disposition with a filename
-  if (part.dispositionType === "INLINE" && 
-      part.dispositionParameters && 
-      part.dispositionParameters.FILENAME) {
+  if (
+    part.dispositionType === 'INLINE' &&
+    part.dispositionParameters &&
+    part.dispositionParameters.FILENAME
+  ) {
     return true;
   }
 
   // Check for content types that are typically attachments
-  if (part.type === "APPLICATION" || 
-      part.type === "IMAGE" || 
-      part.type === "AUDIO" || 
-      part.type === "VIDEO") {
+  if (
+    part.type === 'APPLICATION' ||
+    part.type === 'IMAGE' ||
+    part.type === 'AUDIO' ||
+    part.type === 'VIDEO'
+  ) {
     return true;
   }
 
@@ -477,7 +490,7 @@ function isAttachment(part: ImapBodyStructure): boolean {
   }
 
   // Special case for message/rfc822 parts without disposition
-  if (part.type === "MESSAGE" && part.subtype === "RFC822" && !part.dispositionType) {
+  if (part.type === 'MESSAGE' && part.subtype === 'RFC822' && !part.dispositionType) {
     return true;
   }
 
@@ -491,8 +504,8 @@ function isAttachment(part: ImapBodyStructure): boolean {
  * @returns Array of attachment information
  */
 export function findAttachments(
-  bodyStructure: ImapBodyStructure, 
-  path = ""
+  bodyStructure: ImapBodyStructure,
+  path = '',
 ): Array<{
   filename: string;
   type: string;
@@ -513,14 +526,14 @@ export function findAttachments(
   // Check if this part is an attachment
   if (isAttachment(bodyStructure)) {
     results.push({
-      filename: bodyStructure.dispositionParameters?.FILENAME || 
-                bodyStructure.parameters?.NAME || 
-                "unnamed",
+      filename: bodyStructure.dispositionParameters?.FILENAME ||
+        bodyStructure.parameters?.NAME ||
+        'unnamed',
       type: bodyStructure.type,
       subtype: bodyStructure.subtype,
       size: bodyStructure.size,
       encoding: bodyStructure.encoding,
-      section: path || "1", // Default to "1" if path is empty
+      section: path || '1', // Default to "1" if path is empty
     });
   }
 
@@ -537,10 +550,10 @@ export function findAttachments(
   // Check nested body structure for message/rfc822
   if (bodyStructure.messageBodyStructure) {
     // For message/rfc822, we need to add ".1" to the path
-    const messagePath = path ? `${path}.1` : "1";
+    const messagePath = path ? `${path}.1` : '1';
     const nestedAttachments = findAttachments(bodyStructure.messageBodyStructure, messagePath);
     results.push(...nestedAttachments);
   }
 
   return results;
-} 
+}

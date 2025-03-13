@@ -14,6 +14,8 @@ export { ImapAuthError, ImapCommandError, ImapError } from './src/errors.ts';
 
 // Export parsers
 export {
+  findAttachments,
+  hasAttachments,
   parseBodyStructure,
   parseCapabilities,
   parseEnvelope,
@@ -22,8 +24,6 @@ export {
   parseSearch,
   parseSelect,
   parseStatus,
-  hasAttachments,
-  findAttachments,
 } from './src/parsers/mod.ts';
 
 // Export utility functions
