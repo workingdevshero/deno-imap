@@ -70,7 +70,14 @@ try {
 } catch (error: unknown) {
   console.error("Error:", error instanceof Error ? error.message : String(error));
 } finally {
-  // Disconnect from the server
-  await client.disconnect();
-  console.log("\nDisconnected from IMAP server");
+  try {
+    // Try to disconnect gracefully
+    await client.disconnect();
+    console.log("\nDisconnected from IMAP server");
+  } catch (error) {
+    // If disconnect fails, force close
+    console.error("Error during disconnect:", error instanceof Error ? error.message : String(error));
+    client.close();
+    console.log("\nForced close of IMAP client");
+  }
 } 

@@ -17,6 +17,7 @@ import {
   ImapTimeoutError,
 } from "./errors.ts";
 import * as parsers from "./parsers/mod.ts";
+import { createCancellablePromise } from "./utils/promises.ts";
 import type {
   ImapAuthMechanism,
   ImapBodyStructure,
@@ -211,22 +212,61 @@ export class ImapClient {
 
   /**
    * Disconnects from the IMAP server
+   * Attempts to gracefully close the connection by sending a LOGOUT command
    */
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (!this.connected) {
       return;
     }
 
+    // First, cancel any pending command timeouts
+    if (this.commandTimeoutTimer) {
+      clearTimeout(this.commandTimeoutTimer);
+      this.commandTimeoutTimer = undefined;
+    }
+
     try {
-      // Try to send LOGOUT command
-      this.executeCommand(commands.logout()).catch(() => {
-        // Ignore errors
-      });
+      // Try to send LOGOUT command with a shorter timeout
+      try {
+        // Use executeCommand with a shorter timeout for the LOGOUT command
+        const logoutTimeout = 2000; // 2 second timeout for LOGOUT
+        const originalTimeout = this.options.commandTimeout;
+        
+        // Temporarily set a shorter command timeout
+        this.options.commandTimeout = logoutTimeout;
+        
+        // Execute the LOGOUT command
+        await this.executeCommand(commands.logout());
+        
+        // Restore original timeout
+        this.options.commandTimeout = originalTimeout;
+      } catch (error) {
+        // Ignore errors during logout, but log them
+        console.warn("Error during LOGOUT command:", error);
+      }
     } finally {
+      // Cancel all pending commands immediately
+      for (const [tag, promise] of this.commandPromises.entries()) {
+        promise.reject(new ImapConnectionError("Connection closed by client"));
+        this.commandPromises.delete(tag);
+      }
+      
+      // Clear command promises map
+      this.commandPromises.clear();
+      
+      // Disconnect the connection
       this.connection.disconnect();
+      
+      // Reset state
       this._authenticated = false;
       this._selectedMailbox = undefined;
       this._capabilities.clear();
+      
+      // Reset reconnection state
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
+      
+      // Emit close event
       this.emit("close");
     }
   }
@@ -937,41 +977,46 @@ export class ImapClient {
       this.commandPromises.set(tag, { resolve, reject });
     });
 
-    // Set command timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      this.commandTimeoutTimer = setTimeout(() => {
-        reject(
-          new ImapTimeoutError(command, this.options.commandTimeout || 30000)
-        );
-        this.commandPromises.delete(tag);
-      }, this.options.commandTimeout || 30000);
-    });
-
-    try {
-      // Send the command
-      await this.connection.writeLine(`${tag} ${command}`);
-
-      // Wait for the response
-      const responseLines: string[] = [];
-
-      while (true) {
-        let line: string;
+    // Create a cancellable timeout promise
+    const timeoutMs = this.options.commandTimeout || 30000;
+    const cancellable = createCancellablePromise<string[]>(
+      async () => {
         try {
-          line = await Promise.race([
-            this.connection.readLine(),
-            timeoutPromise,
-          ]);
+          // Send the command
+          await this.connection.writeLine(`${tag} ${command}`);
+
+          // Wait for the response
+          const responseLines: string[] = [];
+
+          while (true) {
+            const line = await this.connection.readLine();
+            responseLines.push(line);
+
+            if (line.startsWith(tag)) {
+              // Command completed
+              if (line.includes("OK")) {
+                this.commandPromises.get(tag)?.resolve(responseLines);
+              } else {
+                this.commandPromises
+                  .get(tag)
+                  ?.reject(new ImapCommandError(command, line));
+              }
+
+              this.commandPromises.delete(tag);
+              break;
+            }
+          }
+
+          return responseLines;
         } catch (error) {
+          this.commandPromises.delete(tag);
+
           // If the error is from the connection (e.g., socket timeout),
           // clean up and rethrow
           if (
             error instanceof ImapTimeoutError ||
             error instanceof ImapConnectionError
           ) {
-            this.commandPromises.delete(tag);
-            clearTimeout(this.commandTimeoutTimer);
-            this.commandTimeoutTimer = undefined;
-
             // If the connection was lost, attempt to reconnect if enabled
             if (
               this.options.autoReconnect &&
@@ -987,44 +1032,31 @@ export class ImapClient {
                 throw error;
               }
             }
-
-            throw error;
           }
-          // Otherwise, rethrow the error
+          
+          // Rethrow the error
           throw error;
         }
+      },
+      timeoutMs,
+      `Command timeout: ${command}`
+    );
 
-        responseLines.push(line);
-
-        if (line.startsWith(tag)) {
-          // Command completed
-          if (line.includes("OK")) {
-            this.commandPromises.get(tag)?.resolve(responseLines);
-          } else {
-            this.commandPromises
-              .get(tag)
-              ?.reject(new ImapCommandError(command, line));
-          }
-
-          this.commandPromises.delete(tag);
-          break;
-        }
-      }
-
-      // Clear timeout
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = undefined;
-
-      return await commandPromise;
+    // Store the timeout clear function for later use
+    this.commandTimeoutTimer = setTimeout(() => {}, 0);
+    clearTimeout(this.commandTimeoutTimer);
+    this.commandTimeoutTimer = 1 as unknown as number; // Just a non-undefined value as a flag
+    
+    try {
+      // Wait for the command to complete or timeout
+      return await cancellable.promise;
     } catch (error) {
       this.commandPromises.delete(tag);
-
-      if (this.commandTimeoutTimer) {
-        clearTimeout(this.commandTimeoutTimer);
-        this.commandTimeoutTimer = undefined;
-      }
-
       throw error;
+    } finally {
+      // Clear the timeout
+      cancellable.disableTimeout();
+      this.commandTimeoutTimer = undefined;
     }
   }
 
@@ -1110,6 +1142,9 @@ export class ImapClient {
     this.reconnectAttempts = 0;
     this.emit("reconnecting");
 
+    // Track the backoff timeout so we can clear it if needed
+    let backoffTimeout: number | undefined;
+
     try {
       // Save the currently selected mailbox to reselect after reconnection
       let previousMailbox: string | undefined;
@@ -1139,7 +1174,14 @@ export class ImapClient {
           // Wait with exponential backoff
           const delay =
             this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          
+          // Use a promise with a stored timeout ID so we can clear it if needed
+          await new Promise<void>((resolve) => {
+            backoffTimeout = setTimeout(() => {
+              backoffTimeout = undefined;
+              resolve();
+            }, delay);
+          });
 
           // Try to connect
           await this.connect();
@@ -1183,7 +1225,61 @@ export class ImapClient {
       this.emit("reconnect_failed", error);
       throw error;
     } finally {
+      // Clear any pending backoff timeout
+      if (backoffTimeout !== undefined) {
+        clearTimeout(backoffTimeout);
+        backoffTimeout = undefined;
+      }
+      
       this.isReconnecting = false;
     }
+  }
+
+  /**
+   * Removes all event listeners
+   */
+  private removeAllEventListeners(): void {
+    this.eventListeners.clear();
+  }
+
+  /**
+   * Forcibly closes all connections and cleans up resources
+   * This is more aggressive than disconnect() as it doesn't try to send a LOGOUT command
+   */
+  close(): void {
+    // Cancel any pending command timeouts
+    if (this.commandTimeoutTimer) {
+      clearTimeout(this.commandTimeoutTimer);
+      this.commandTimeoutTimer = undefined;
+    }
+    
+    // Cancel all pending commands immediately
+    for (const [tag, promise] of this.commandPromises.entries()) {
+      promise.reject(new ImapConnectionError("Connection forcibly closed by client"));
+      this.commandPromises.delete(tag);
+    }
+    
+    // Clear command promises map
+    this.commandPromises.clear();
+    
+    // Disconnect the connection
+    if (this.connected) {
+      this.connection.disconnect();
+    }
+    
+    // Reset state
+    this._authenticated = false;
+    this._selectedMailbox = undefined;
+    this._capabilities.clear();
+    
+    // Reset reconnection state
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
+    
+    // Emit close event
+    this.emit("close");
+    
+    // Remove all event listeners
+    this.removeAllEventListeners();
   }
 }

@@ -25,9 +25,6 @@ Deno.test("ImapConnection - Socket timeout handling", async () => {
   // Verify connection is marked as disconnected
   assertEquals((connection as any)._connected, false);
   
-  // Verify socket timeout flag is set
-  assertEquals((connection as any)._socketTimedOut, true);
-  
   // Verify socket timeout error is created
   assertEquals((connection as any).socketTimeoutError instanceof ImapTimeoutError, true);
   
@@ -119,7 +116,6 @@ Deno.test("ImapConnection - Connect resets socket timeout state", () => {
   });
   
   // Set timeout state
-  (connection as any)._socketTimedOut = true;
   (connection as any).socketTimeoutError = new ImapTimeoutError("socket", 100);
   
   // Mock the connection methods
@@ -128,10 +124,8 @@ Deno.test("ImapConnection - Connect resets socket timeout state", () => {
   (connection as any).readLine = () => "* OK IMAP4rev1 Service Ready";
   
   // Directly call the internal method that resets timeout state
-  (connection as any)._socketTimedOut = false;
   (connection as any).socketTimeoutError = undefined;
   
   // Verify timeout state was reset
-  assertEquals((connection as any)._socketTimedOut, false);
   assertEquals((connection as any).socketTimeoutError, undefined);
 }); 

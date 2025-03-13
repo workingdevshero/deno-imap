@@ -57,7 +57,7 @@ function createMockClient(options: {
 
   // Create a mock connection
   const mockConnection = {
-    socketTimedOut: false,
+    socketTimeoutError: undefined,
     disconnectCount: 0,
     connectCount: 0,
     readLineCount: 0,
