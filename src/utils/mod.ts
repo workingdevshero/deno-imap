@@ -1,4 +1,11 @@
 /**
+ * Utilities module
+ * @module
+ */
+
+export * from "./promises.ts";
+
+/**
  * IMAP Utilities
  * 
  * This module contains utility functions for working with IMAP.

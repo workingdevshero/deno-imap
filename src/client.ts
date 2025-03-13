@@ -1,27 +1,31 @@
 /**
  * IMAP Client
- * 
+ *
  * Main implementation of the IMAP client.
  * @module
  */
 
-import { ImapConnection } from "./connection.ts";
 import * as commands from "./commands/mod.ts";
-import * as parsers from "./parsers/mod.ts";
+import { ImapConnection } from "./connection.ts";
 import {
   ImapAuthError,
   ImapCapabilityError,
   ImapCommandError,
+  ImapConnectionError,
   ImapNoMailboxSelectedError,
   ImapNotConnectedError,
   ImapTimeoutError,
 } from "./errors.ts";
-import {
+import * as parsers from "./parsers/mod.ts";
+import { createCancellablePromise } from "./utils/promises.ts";
+import type {
   ImapAuthMechanism,
-  ImapCapability,
+  ImapBodyStructure,
+  ImapEnvelope,
   ImapFetchOptions,
   ImapMailbox,
   ImapMessage,
+  ImapMessagePart,
   ImapOptions,
   ImapSearchCriteria,
 } from "./types/mod.ts";
@@ -51,8 +55,8 @@ export class ImapClient {
   private _capabilities: Set<string> = new Set();
   /** Currently selected mailbox */
   private _selectedMailbox?: ImapMailbox;
-  /** Command timeout timer */
-  private commandTimeoutTimer?: number;
+  /** Command timeout cancellable promise */
+  private commandTimeoutCancellable?: ReturnType<typeof createCancellablePromise>;
   /** Whether the client is authenticated */
   private _authenticated = false;
   /** Command promises */
@@ -60,6 +64,10 @@ export class ImapClient {
     string,
     { resolve: (value: string[]) => void; reject: (reason: Error) => void }
   > = new Map();
+  /** Reconnection attempt counter */
+  private reconnectAttempts = 0;
+  /** Whether a reconnection is in progress */
+  private isReconnecting = false;
 
   /**
    * Creates a new IMAP client
@@ -72,6 +80,7 @@ export class ImapClient {
     if (this.options.autoConnect) {
       this.connect().catch((error) => {
         console.error("Failed to auto-connect:", error);
+        // Error is propagated to the caller via the returned promise
       });
     }
   }
@@ -88,6 +97,13 @@ export class ImapClient {
    */
   get authenticated(): boolean {
     return this._authenticated;
+  }
+
+  /**
+   * Whether a reconnection is in progress
+   */
+  get reconnecting(): boolean {
+    return this.isReconnecting;
   }
 
   /**
@@ -129,23 +145,69 @@ export class ImapClient {
 
   /**
    * Disconnects from the IMAP server
+   * Attempts to gracefully close the connection by sending a LOGOUT command
    */
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (!this.connected) {
       return;
     }
 
+    // First, cancel any pending command timeouts
+    if (this.commandTimeoutCancellable) {
+      this.commandTimeoutCancellable.disableTimeout();
+      this.commandTimeoutCancellable = undefined;
+    }
+
     try {
-      // Try to send LOGOUT command
-      this.executeCommand(commands.logout()).catch(() => {
-        // Ignore errors
-      });
+      // Try to send LOGOUT command with a shorter timeout
+      try {
+        // Use executeCommand with a shorter timeout for the LOGOUT command
+        const logoutTimeout = 2000; // 2 second timeout for LOGOUT
+        const originalTimeout = this.options.commandTimeout;
+        
+        // Temporarily set a shorter command timeout
+        this.options.commandTimeout = logoutTimeout;
+        
+        // Execute the LOGOUT command
+        await this.executeCommand(commands.logout());
+        
+        // Restore original timeout
+        this.options.commandTimeout = originalTimeout;
+      } catch (error) {
+        // Ignore errors during logout, but log them
+        console.warn("Error during LOGOUT command:", error);
+      }
     } finally {
+      // Cancel all pending commands immediately
+      for (const [tag, promise] of this.commandPromises.entries()) {
+        promise.reject(new ImapConnectionError("Connection closed by client"));
+        this.commandPromises.delete(tag);
+      }
+      
+      // Clear command promises map
+      this.commandPromises.clear();
+      
+      // Disconnect the connection
       this.connection.disconnect();
+      
+      // Reset state
       this._authenticated = false;
       this._selectedMailbox = undefined;
       this._capabilities.clear();
+      
+      // Reset reconnection state
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
     }
+  }
+
+  /**
+   * Reconnects to the IMAP server
+   * @returns Promise that resolves when reconnected
+   * @throws {ImapConnectionError} If reconnection fails
+   */
+  async forceReconnect(): Promise<void> {
+    await this.reconnect();
   }
 
   /**
@@ -154,7 +216,7 @@ export class ImapClient {
    */
   async updateCapabilities(): Promise<string[]> {
     const response = await this.executeCommand(commands.capability());
-    
+
     for (const line of response) {
       if (line.startsWith("* CAPABILITY")) {
         const capabilities = parsers.parseCapabilities(line);
@@ -162,7 +224,7 @@ export class ImapClient {
         return capabilities;
       }
     }
-    
+
     return [];
   }
 
@@ -196,19 +258,23 @@ export class ImapClient {
           break;
         case "OAUTH2":
         case "XOAUTH2":
-          throw new Error(`Authentication mechanism ${mechanism} not implemented yet`);
+          throw new Error(
+            `Authentication mechanism ${mechanism} not implemented yet`
+          );
         default:
           throw new Error(`Unknown authentication mechanism: ${mechanism}`);
       }
 
       this._authenticated = true;
-      
+
       // Update capabilities after authentication
       await this.updateCapabilities();
     } catch (error) {
+      // Only transform ImapCommandError to ImapAuthError
       if (error instanceof ImapCommandError) {
         throw new ImapAuthError(`Authentication failed: ${error.response}`);
       }
+      // Let other errors propagate naturally
       throw error;
     }
   }
@@ -220,7 +286,7 @@ export class ImapClient {
   private async authenticatePlain(): Promise<void> {
     const authString = `\u0000${this.options.username}\u0000${this.options.password}`;
     const base64Auth = btoa(authString);
-    
+
     await this.executeCommand(`AUTHENTICATE PLAIN ${base64Auth}`);
   }
 
@@ -229,7 +295,9 @@ export class ImapClient {
    * @returns Promise that resolves when authenticated
    */
   private async authenticateLogin(): Promise<void> {
-    await this.executeCommand(commands.login(this.options.username, this.options.password));
+    await this.executeCommand(
+      commands.login(this.options.username, this.options.password)
+    );
   }
 
   /**
@@ -247,9 +315,11 @@ export class ImapClient {
       await this.authenticate();
     }
 
-    const response = await this.executeCommand(commands.list(reference, mailbox));
+    const response = await this.executeCommand(
+      commands.list(reference, mailbox)
+    );
     const mailboxes: ImapMailbox[] = [];
-    
+
     for (const line of response) {
       if (line.startsWith("* LIST")) {
         try {
@@ -260,7 +330,7 @@ export class ImapClient {
         }
       }
     }
-    
+
     return mailboxes;
   }
 
@@ -272,7 +342,7 @@ export class ImapClient {
    */
   async getMailboxStatus(
     mailbox: string,
-    items = ["MESSAGES", "RECENT", "UNSEEN", "UIDNEXT", "UIDVALIDITY"],
+    items = ["MESSAGES", "RECENT", "UNSEEN", "UIDNEXT", "UIDVALIDITY"]
   ): Promise<Partial<ImapMailbox>> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
@@ -283,7 +353,7 @@ export class ImapClient {
     }
 
     const response = await this.executeCommand(commands.status(mailbox, items));
-    
+
     for (const line of response) {
       if (line.startsWith("* STATUS")) {
         try {
@@ -293,7 +363,7 @@ export class ImapClient {
         }
       }
     }
-    
+
     return { name: mailbox };
   }
 
@@ -313,7 +383,7 @@ export class ImapClient {
 
     const response = await this.executeCommand(commands.select(mailbox));
     const mailboxInfo = parsers.parseSelect(response);
-    
+
     // Get the actual unseen count using STATUS command
     try {
       const status = await this.getMailboxStatus(mailbox, ["UNSEEN"]);
@@ -323,14 +393,14 @@ export class ImapClient {
     } catch (error) {
       console.warn("Failed to get unseen count:", error);
     }
-    
+
     this._selectedMailbox = {
       name: mailbox,
       flags: mailboxInfo.flags || [],
       delimiter: "/", // Default delimiter
       ...mailboxInfo,
     };
-    
+
     return this._selectedMailbox;
   }
 
@@ -350,9 +420,9 @@ export class ImapClient {
 
     const response = await this.executeCommand(commands.examine(mailbox));
     const mailboxInfo = parsers.parseSelect(response);
-    
+
     // Don't set as selected mailbox since it's read-only
-    
+
     return {
       name: mailbox,
       flags: mailboxInfo.flags || [],
@@ -414,7 +484,7 @@ export class ImapClient {
     }
 
     await this.executeCommand(commands.deleteMailbox(mailbox));
-    
+
     // If the deleted mailbox is the currently selected one, clear it
     if (this._selectedMailbox && this._selectedMailbox.name === mailbox) {
       this._selectedMailbox = undefined;
@@ -437,7 +507,7 @@ export class ImapClient {
     }
 
     await this.executeCommand(commands.rename(oldName, newName));
-    
+
     // If the renamed mailbox is the currently selected one, update its name
     if (this._selectedMailbox && this._selectedMailbox.name === oldName) {
       this._selectedMailbox.name = newName;
@@ -484,7 +554,10 @@ export class ImapClient {
    * @param charset Character set
    * @returns Promise that resolves with the message numbers
    */
-  async search(criteria: ImapSearchCriteria, charset?: string): Promise<number[]> {
+  async search(
+    criteria: ImapSearchCriteria,
+    charset?: string
+  ): Promise<number[]> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
     }
@@ -497,8 +570,10 @@ export class ImapClient {
       throw new ImapNoMailboxSelectedError();
     }
 
-    const response = await this.executeCommand(commands.search(criteria, charset));
-    
+    const response = await this.executeCommand(
+      commands.search(criteria, charset)
+    );
+
     for (const line of response) {
       if (line.startsWith("* SEARCH")) {
         try {
@@ -508,7 +583,7 @@ export class ImapClient {
         }
       }
     }
-    
+
     return [];
   }
 
@@ -518,7 +593,10 @@ export class ImapClient {
    * @param options Fetch options
    * @returns Promise that resolves with the messages
    */
-  async fetch(sequence: string, options: ImapFetchOptions): Promise<ImapMessage[]> {
+  async fetch(
+    sequence: string,
+    options: ImapFetchOptions
+  ): Promise<ImapMessage[]> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
     }
@@ -531,33 +609,35 @@ export class ImapClient {
       throw new ImapNoMailboxSelectedError();
     }
 
-    const response = await this.executeCommand(commands.fetch(sequence, options));
-    
+    const response = await this.executeCommand(
+      commands.fetch(sequence, options)
+    );
+
     // Parse the fetch response
     const messages: ImapMessage[] = [];
-    
+
     // Group the response lines by message
     const messageGroups: string[][] = [];
     let currentGroup: string[] = [];
     let inLiteral = false;
     let literalSize = 0;
     let literalCollected = 0;
-    
+
     for (const line of response) {
       // Check if this is the start of a new message
       // Format: * 1 FETCH (...)
       const fetchMatch = line.match(/^\* (\d+) FETCH/i);
-      
+
       if (fetchMatch && !inLiteral) {
         // If we were collecting lines for a message, add them to the groups
         if (currentGroup.length > 0) {
           messageGroups.push(currentGroup);
           currentGroup = [];
         }
-        
+
         // Start a new group
         currentGroup.push(line);
-        
+
         // Check if this line contains a literal string
         const literalMatch = line.match(/\{(\d+)\}$/);
         if (literalMatch) {
@@ -568,11 +648,11 @@ export class ImapClient {
       } else {
         // Add the line to the current group
         currentGroup.push(line);
-        
+
         // If we're collecting a literal, update the count
         if (inLiteral) {
           literalCollected += line.length + 2; // +2 for CRLF
-          
+
           // Check if we've collected the entire literal
           if (literalCollected >= literalSize) {
             inLiteral = false;
@@ -580,17 +660,17 @@ export class ImapClient {
         }
       }
     }
-    
+
     // Add the last group if it's not empty
     if (currentGroup.length > 0) {
       messageGroups.push(currentGroup);
     }
-    
+
     // Parse each message group
     for (const group of messageGroups) {
       try {
         const messageData = parsers.parseFetch(group);
-        
+
         if (messageData && messageData.seq) {
           // Create a message object with the parsed data
           const message: ImapMessage = {
@@ -599,13 +679,17 @@ export class ImapClient {
             uid: messageData.uid as number,
             size: messageData.size as number,
             internalDate: messageData.internalDate as Date,
-            envelope: messageData.envelope as any,
-            bodyStructure: messageData.bodyStructure as any,
-            headers: messageData.headers as any,
-            parts: messageData.parts as any,
+            envelope: messageData.envelope as ImapEnvelope | undefined,
+            bodyStructure: messageData.bodyStructure as
+              | ImapBodyStructure
+              | undefined,
+            headers: messageData.headers as Record<string, string | string[]>,
+            parts: messageData.parts as
+              | Record<string, ImapMessagePart>
+              | undefined,
             raw: messageData.raw as Uint8Array,
           };
-          
+
           // Add the message to the list
           messages.push(message);
         }
@@ -613,7 +697,7 @@ export class ImapClient {
         console.warn("Failed to parse FETCH response:", error);
       }
     }
-    
+
     return messages;
   }
 
@@ -629,7 +713,7 @@ export class ImapClient {
     sequence: string,
     flags: string[],
     action: "set" | "add" | "remove" = "set",
-    useUid = false,
+    useUid = false
   ): Promise<void> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
@@ -653,7 +737,11 @@ export class ImapClient {
    * @param useUid Whether to use UIDs
    * @returns Promise that resolves when the messages are copied
    */
-  async copyMessages(sequence: string, mailbox: string, useUid = false): Promise<void> {
+  async copyMessages(
+    sequence: string,
+    mailbox: string,
+    useUid = false
+  ): Promise<void> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
     }
@@ -676,7 +764,11 @@ export class ImapClient {
    * @param useUid Whether to use UIDs
    * @returns Promise that resolves when the messages are moved
    */
-  async moveMessages(sequence: string, mailbox: string, useUid = false): Promise<void> {
+  async moveMessages(
+    sequence: string,
+    mailbox: string,
+    useUid = false
+  ): Promise<void> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
     }
@@ -732,7 +824,7 @@ export class ImapClient {
     mailbox: string,
     message: string,
     flags?: string[],
-    date?: Date,
+    date?: Date
   ): Promise<void> {
     if (!this.connected) {
       throw new ImapNotConnectedError();
@@ -742,24 +834,51 @@ export class ImapClient {
       await this.authenticate();
     }
 
-    // Send the APPEND command
-    const tag = this.generateTag();
-    const command = commands.append(mailbox, message, flags, date);
-    
-    await this.connection.writeLine(`${tag} ${command}`);
-    
-    // Wait for the continuation response
-    const response = await this.connection.readLine();
-    
-    if (!response.startsWith("+")) {
-      throw new ImapCommandError("APPEND", response);
+    try {
+      // Send the APPEND command
+      const tag = this.generateTag();
+      const command = commands.append(mailbox, message, flags, date);
+
+      await this.connection.writeLine(`${tag} ${command}`);
+
+      // Wait for the continuation response
+      const response = await this.connection.readLine();
+
+      if (!response.startsWith("+")) {
+        throw new ImapCommandError("APPEND", response);
+      }
+
+      // Send the message content
+      await this.connection.writeLine(message);
+
+      // Wait for the command completion
+      await this.waitForCommandCompletion(tag);
+    } catch (error) {
+      // Handle connection errors
+      if (
+        error instanceof ImapTimeoutError ||
+        error instanceof ImapConnectionError
+      ) {
+        // If the connection was lost, attempt to reconnect if enabled
+        if (
+          this.options.autoReconnect &&
+          error instanceof ImapConnectionError
+        ) {
+          try {
+            await this.reconnect();
+
+            // If reconnection was successful, retry the append operation
+            // Note: The message may have been partially appended before the connection was lost
+            return await this.appendMessage(mailbox, message, flags, date);
+          } catch (_reconnectError) {
+            // If reconnection failed, throw the original error
+            throw error;
+          }
+        }
+      }
+
+      throw error;
     }
-    
-    // Send the message content
-    await this.connection.writeLine(message);
-    
-    // Wait for the command completion
-    await this.waitForCommandCompletion(tag);
   }
 
   /**
@@ -777,52 +896,106 @@ export class ImapClient {
       this.commandPromises.set(tag, { resolve, reject });
     });
 
-    // Set command timeout
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      this.commandTimeoutTimer = setTimeout(() => {
-        reject(new ImapTimeoutError(command, this.options.commandTimeout || 30000));
-        this.commandPromises.delete(tag);
-      }, this.options.commandTimeout || 30000);
-    });
+    // Create a cancellable timeout promise
+    const timeoutMs = this.options.commandTimeout || 30000;
+    const cancellable = createCancellablePromise<string[]>(
+      async () => {
+        try {
+          // Send the command
+          await this.connection.writeLine(`${tag} ${command}`);
 
-    try {
-      // Send the command
-      await this.connection.writeLine(`${tag} ${command}`);
+          // Wait for the response
+          const responseLines: string[] = [];
 
-      // Wait for the response
-      const responseLines: string[] = [];
-      
-      while (true) {
-        const line = await Promise.race([this.connection.readLine(), timeoutPromise]);
-        responseLines.push(line);
-        
-        if (line.startsWith(tag)) {
-          // Command completed
-          if (line.includes("OK")) {
-            this.commandPromises.get(tag)?.resolve(responseLines);
-          } else {
-            this.commandPromises.get(tag)?.reject(new ImapCommandError(command, line));
+          while (true) {
+            const line = await this.connection.readLine();
+            responseLines.push(line);
+
+            if (line.startsWith(tag)) {
+              // Command completed
+              if (line.includes("OK")) {
+                this.commandPromises.get(tag)?.resolve(responseLines);
+              } else {
+                this.commandPromises
+                  .get(tag)
+                  ?.reject(new ImapCommandError(command, line));
+              }
+
+              this.commandPromises.delete(tag);
+              break;
+            }
+          }
+
+          return responseLines;
+        } catch (error) {
+          this.commandPromises.delete(tag);
+
+          // If the error is from the connection (e.g., socket timeout),
+          // clean up and rethrow
+          if (
+            error instanceof ImapTimeoutError ||
+            error instanceof ImapConnectionError
+          ) {
+            // If the connection was lost, attempt to reconnect if enabled
+            if (
+              this.options.autoReconnect &&
+              error instanceof ImapConnectionError
+            ) {
+              try {
+                await this.reconnect();
+
+                // If reconnection was successful, retry the command
+                return await this.executeCommand(command);
+              } catch (_reconnectError) {
+                // If reconnection failed, throw the original error
+                throw error;
+              }
+            }
           }
           
-          this.commandPromises.delete(tag);
-          break;
+          // Rethrow the error
+          throw error;
         }
-      }
+      },
+      timeoutMs,
+      `Command timeout: ${command}`
+    );
 
-      // Clear timeout
-      clearTimeout(this.commandTimeoutTimer);
-      this.commandTimeoutTimer = undefined;
-
-      return await commandPromise;
+    // Store the cancellable promise for later cleanup
+    this.commandTimeoutCancellable = cancellable;
+    
+    try {
+      // Wait for the command to complete or timeout
+      return await cancellable.promise;
     } catch (error) {
       this.commandPromises.delete(tag);
       
-      if (this.commandTimeoutTimer) {
-        clearTimeout(this.commandTimeoutTimer);
-        this.commandTimeoutTimer = undefined;
+      // Automatically disconnect on timeout
+      if (error instanceof ImapTimeoutError) {
+        console.warn(`Command timed out: ${command}. Disconnecting...`);
+        this.connection.disconnect();
+        
+        // Reconnect if enabled
+        if (this.options.autoReconnect) {
+          try {
+            await this.reconnect();
+            console.log("Reconnected after command timeout");
+            // Don't retry the command automatically - just inform that we're reconnected
+          } catch (reconnectError) {
+            // Combine the errors to provide more context
+            throw new ImapConnectionError(
+              `Command timed out and reconnection failed: ${error.message}`,
+              reconnectError instanceof Error ? reconnectError : new Error(String(reconnectError))
+            );
+          }
+        }
       }
       
       throw error;
+    } finally {
+      // Clear the timeout
+      cancellable.disableTimeout();
+      this.commandTimeoutCancellable = undefined;
     }
   }
 
@@ -833,21 +1006,54 @@ export class ImapClient {
    */
   private async waitForCommandCompletion(tag: string): Promise<string[]> {
     const responseLines: string[] = [];
-    
+
     while (true) {
-      const line = await this.connection.readLine();
-      responseLines.push(line);
-      
-      if (line.startsWith(tag)) {
-        // Command completed
-        if (!line.includes("OK")) {
-          throw new ImapCommandError("command", line);
+      try {
+        const line = await this.connection.readLine();
+        responseLines.push(line);
+
+        if (line.startsWith(tag)) {
+          // Command completed
+          if (!line.includes("OK")) {
+            throw new ImapCommandError("command", line);
+          }
+
+          break;
         }
-        
-        break;
+      } catch (error) {
+        // If the error is from the connection (e.g., socket timeout),
+        // clean up and rethrow
+        if (
+          error instanceof ImapTimeoutError ||
+          error instanceof ImapConnectionError
+        ) {
+          // If the connection was lost, attempt to reconnect if enabled
+          if (
+            this.options.autoReconnect &&
+            error instanceof ImapConnectionError
+          ) {
+            try {
+              await this.reconnect();
+
+              // If reconnection was successful, we can't continue waiting for this command
+              // as the server won't remember it. Throw an error to indicate the command failed.
+              throw new ImapCommandError(
+                "command",
+                "Connection lost during command execution and was reconnected. The command may or may not have been executed."
+              );
+            } catch (_reconnectError) {
+              // If reconnection failed, throw the original error
+              throw error;
+            }
+          }
+
+          throw error;
+        }
+        // Otherwise, rethrow the error
+        throw error;
       }
     }
-    
+
     return responseLines;
   }
 
@@ -859,4 +1065,143 @@ export class ImapClient {
     this.tagCounter++;
     return `A${this.tagCounter.toString().padStart(4, "0")}`;
   }
-} 
+
+  /**
+   * Attempts to reconnect to the IMAP server
+   * @returns Promise that resolves when reconnected
+   * @throws {ImapConnectionError} If reconnection fails after max attempts
+   */
+  private async reconnect(): Promise<void> {
+    // If already reconnecting, wait for that to complete
+    if (this.isReconnecting) {
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts = 0;
+
+    // Track the backoff timeout so we can clear it if needed
+    let backoffTimeout: number | undefined;
+
+    try {
+      // Save the currently selected mailbox to reselect after reconnection
+      let previousMailbox: string | undefined;
+      if (this._selectedMailbox) {
+        previousMailbox = this._selectedMailbox.name;
+      }
+
+      // Disconnect if still connected
+      if (this.connected) {
+        this.connection.disconnect();
+      }
+
+      // Reset state
+      this._authenticated = false;
+      this._selectedMailbox = undefined as ImapMailbox | undefined;
+      this._capabilities.clear();
+
+      // Try to reconnect with exponential backoff
+      while (this.reconnectAttempts < this.options.maxReconnectAttempts!) {
+        try {
+          console.log(
+            `Reconnection attempt ${this.reconnectAttempts + 1}/${
+              this.options.maxReconnectAttempts
+            }...`
+          );
+
+          // Wait with exponential backoff
+          const delay =
+            this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
+          
+          // Use a promise with a stored timeout ID so we can clear it if needed
+          await new Promise<void>((resolve) => {
+            backoffTimeout = setTimeout(() => {
+              backoffTimeout = undefined;
+              resolve();
+            }, delay);
+          });
+
+          // Try to connect
+          await this.connect();
+
+          // If connected, authenticate
+          if (this.connected) {
+            await this.authenticate();
+
+            // If previously had a mailbox selected, reselect it
+            if (previousMailbox && this._authenticated) {
+              await this.selectMailbox(previousMailbox);
+            }
+
+            console.log("Reconnection successful");
+            
+            // Return the current mailbox name
+            let currentMailbox: string | undefined;
+            if (this._selectedMailbox) {
+              currentMailbox = this._selectedMailbox.name;
+            }
+
+            this.reconnectAttempts = 0;
+            return;
+          }
+        } catch (error) {
+          console.warn(
+            `Reconnection attempt ${this.reconnectAttempts + 1} failed:`,
+            error
+          );
+        }
+
+        this.reconnectAttempts++;
+      }
+
+      // If we get here, all reconnection attempts failed
+      const error = new ImapConnectionError(
+        `Failed to reconnect after ${this.options.maxReconnectAttempts} attempts`
+      );
+      throw error;
+    } finally {
+      // Clear any pending backoff timeout
+      if (backoffTimeout !== undefined) {
+        clearTimeout(backoffTimeout);
+        backoffTimeout = undefined;
+      }
+      
+      this.isReconnecting = false;
+    }
+  }
+
+  /**
+   * Forcibly closes all connections and cleans up resources
+   * This is more aggressive than disconnect() as it doesn't try to send a LOGOUT command
+   */
+  close(): void {
+    // Cancel any pending command timeouts
+    if (this.commandTimeoutCancellable) {
+      this.commandTimeoutCancellable.disableTimeout();
+      this.commandTimeoutCancellable = undefined;
+    }
+    
+    // Cancel all pending commands immediately
+    for (const [tag, promise] of this.commandPromises.entries()) {
+      promise.reject(new ImapConnectionError("Connection forcibly closed by client"));
+      this.commandPromises.delete(tag);
+    }
+    
+    // Clear command promises map
+    this.commandPromises.clear();
+    
+    // Disconnect the connection
+    if (this.connected) {
+      this.connection.disconnect();
+    }
+    
+    // Reset state
+    this._authenticated = false;
+    this._selectedMailbox = undefined;
+    this._capabilities.clear();
+    
+    // Reset reconnection state
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
+  }
+}
