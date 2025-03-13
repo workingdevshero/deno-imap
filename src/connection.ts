@@ -192,6 +192,7 @@ export class ImapConnection {
   private handleSocketTimeout(): void {
     // Instead of throwing an exception directly, mark the connection as timed out
     // and close it. Subsequent read/write operations will fail with a timeout error.
+    // This allows consumers to catch/handle the timeout error gracefully.
     this._socketTimedOut = true;
     this.socketTimeoutError = new ImapTimeoutError(
       "socket",
