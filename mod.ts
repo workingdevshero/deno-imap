@@ -29,6 +29,7 @@ export {
 // Export utility functions
 export {
   createMailboxHierarchy,
+  decodeAttachment,
   deleteMessages,
   fetchAllMessages,
   fetchMessagesFromSender,

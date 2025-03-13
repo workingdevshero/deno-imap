@@ -4,6 +4,7 @@
  */
 
 export * from './promises.ts';
+export * from './attachments.ts';
 
 /**
  * IMAP Utilities
