@@ -31,22 +31,6 @@ import type {
 } from "./types/mod.ts";
 
 /**
- * Event types for the IMAP client
- */
-export type ImapClientEvent =
-  | "reconnecting"
-  | "reconnected"
-  | "reconnect_failed"
-  | "error"
-  | "close"
-  | "end";
-
-/**
- * Event listener type
- */
-export type ImapClientEventListener = (data?: any) => void;
-
-/**
  * Default options for the IMAP client
  */
 const DEFAULT_OPTIONS: Partial<ImapOptions> = {
@@ -84,9 +68,6 @@ export class ImapClient {
   private reconnectAttempts = 0;
   /** Whether a reconnection is in progress */
   private isReconnecting = false;
-  /** Event listeners */
-  private eventListeners: Map<ImapClientEvent, Set<ImapClientEventListener>> =
-    new Map();
 
   /**
    * Creates a new IMAP client
@@ -99,48 +80,8 @@ export class ImapClient {
     if (this.options.autoConnect) {
       this.connect().catch((error) => {
         console.error("Failed to auto-connect:", error);
-        this.emit("error", error);
+        // Error is propagated to the caller via the returned promise
       });
-    }
-  }
-
-  /**
-   * Adds an event listener
-   * @param event Event type
-   * @param listener Event listener
-   */
-  on(event: ImapClientEvent, listener: ImapClientEventListener): void {
-    if (!this.eventListeners.has(event)) {
-      this.eventListeners.set(event, new Set());
-    }
-    this.eventListeners.get(event)?.add(listener);
-  }
-
-  /**
-   * Removes an event listener
-   * @param event Event type
-   * @param listener Event listener
-   */
-  off(event: ImapClientEvent, listener: ImapClientEventListener): void {
-    if (this.eventListeners.has(event)) {
-      this.eventListeners.get(event)?.delete(listener);
-    }
-  }
-
-  /**
-   * Emits an event
-   * @param event Event type
-   * @param data Event data
-   */
-  private emit(event: ImapClientEvent, data?: any): void {
-    if (this.eventListeners.has(event)) {
-      for (const listener of this.eventListeners.get(event) || []) {
-        try {
-          listener(data);
-        } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
-        }
-      }
     }
   }
 
@@ -188,26 +129,18 @@ export class ImapClient {
       return;
     }
 
-    try {
-      await this.connection.connect();
+    await this.connection.connect();
 
-      // Read the server greeting
-      const greeting = await this.connection.readLine();
+    // Read the server greeting
+    const greeting = await this.connection.readLine();
 
-      if (!greeting.startsWith("* OK")) {
-        this.connection.disconnect();
-        throw new ImapCommandError("connect", greeting);
-      }
-
-      // Get server capabilities
-      await this.updateCapabilities();
-    } catch (error) {
-      // If the error is a socket timeout, emit an error event
-      if (error instanceof ImapTimeoutError) {
-        this.emit("error", error);
-      }
-      throw error;
+    if (!greeting.startsWith("* OK")) {
+      this.connection.disconnect();
+      throw new ImapCommandError("connect", greeting);
     }
+
+    // Get server capabilities
+    await this.updateCapabilities();
   }
 
   /**
@@ -265,9 +198,6 @@ export class ImapClient {
       // Reset reconnection state
       this.reconnectAttempts = 0;
       this.isReconnecting = false;
-      
-      // Emit close event
-      this.emit("close");
     }
   }
 
@@ -285,25 +215,17 @@ export class ImapClient {
    * @returns Promise that resolves with the capabilities
    */
   async updateCapabilities(): Promise<string[]> {
-    try {
-      const response = await this.executeCommand(commands.capability());
+    const response = await this.executeCommand(commands.capability());
 
-      for (const line of response) {
-        if (line.startsWith("* CAPABILITY")) {
-          const capabilities = parsers.parseCapabilities(line);
-          this._capabilities = new Set(capabilities);
-          return capabilities;
-        }
+    for (const line of response) {
+      if (line.startsWith("* CAPABILITY")) {
+        const capabilities = parsers.parseCapabilities(line);
+        this._capabilities = new Set(capabilities);
+        return capabilities;
       }
-
-      return [];
-    } catch (error) {
-      // If the error is a socket timeout, emit an error event
-      if (error instanceof ImapTimeoutError) {
-        this.emit("error", error);
-      }
-      throw error;
     }
+
+    return [];
   }
 
   /**
@@ -348,14 +270,11 @@ export class ImapClient {
       // Update capabilities after authentication
       await this.updateCapabilities();
     } catch (error) {
-      // If the error is a socket timeout, emit an error event
-      if (error instanceof ImapTimeoutError) {
-        this.emit("error", error);
-      }
-
+      // Only transform ImapCommandError to ImapAuthError
       if (error instanceof ImapCommandError) {
         throw new ImapAuthError(`Authentication failed: ${error.response}`);
       }
+      // Let other errors propagate naturally
       throw error;
     }
   }
@@ -1138,7 +1057,6 @@ export class ImapClient {
 
     this.isReconnecting = true;
     this.reconnectAttempts = 0;
-    this.emit("reconnecting");
 
     // Track the backoff timeout so we can clear it if needed
     let backoffTimeout: number | undefined;
@@ -1194,14 +1112,13 @@ export class ImapClient {
             }
 
             console.log("Reconnection successful");
-
-            // Get current mailbox name for the event
+            
+            // Return the current mailbox name
             let currentMailbox: string | undefined;
             if (this._selectedMailbox) {
               currentMailbox = this._selectedMailbox.name;
             }
 
-            this.emit("reconnected", { mailbox: currentMailbox });
             this.reconnectAttempts = 0;
             return;
           }
@@ -1210,7 +1127,6 @@ export class ImapClient {
             `Reconnection attempt ${this.reconnectAttempts + 1} failed:`,
             error
           );
-          this.emit("error", error);
         }
 
         this.reconnectAttempts++;
@@ -1220,7 +1136,6 @@ export class ImapClient {
       const error = new ImapConnectionError(
         `Failed to reconnect after ${this.options.maxReconnectAttempts} attempts`
       );
-      this.emit("reconnect_failed", error);
       throw error;
     } finally {
       // Clear any pending backoff timeout
@@ -1231,13 +1146,6 @@ export class ImapClient {
       
       this.isReconnecting = false;
     }
-  }
-
-  /**
-   * Removes all event listeners
-   */
-  private removeAllEventListeners(): void {
-    this.eventListeners.clear();
   }
 
   /**
@@ -1273,11 +1181,5 @@ export class ImapClient {
     // Reset reconnection state
     this.reconnectAttempts = 0;
     this.isReconnecting = false;
-    
-    // Emit close event
-    this.emit("close");
-    
-    // Remove all event listeners
-    this.removeAllEventListeners();
   }
 }

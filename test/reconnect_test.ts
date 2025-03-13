@@ -155,40 +155,12 @@ function createMockClient(options: {
     (this as any).connection._connected = true;
     (this as any)._authenticated = true;
     (this as any)._capabilities = new Set(["IMAP4rev1", "STARTTLS", "AUTH=PLAIN"]);
-    (this as any).emit("reconnected", { mailbox: "INBOX" });
     
     return Promise.resolve();
   };
   
-  // Add event tracking
-  (client as any).eventsCalled = {
-    reconnecting: 0,
-    reconnected: 0,
-    reconnect_failed: 0,
-    error: 0,
-    close: 0
-  };
-  
-  // Add event listeners to track events
-  client.on("reconnecting", () => {
-    (client as any).eventsCalled.reconnecting++;
-  });
-  
-  client.on("reconnected", () => {
-    (client as any).eventsCalled.reconnected++;
-  });
-  
-  client.on("reconnect_failed", () => {
-    (client as any).eventsCalled.reconnect_failed++;
-  });
-  
-  client.on("error", () => {
-    (client as any).eventsCalled.error++;
-  });
-  
-  client.on("close", () => {
-    (client as any).eventsCalled.close++;
-  });
+  // Track reconnection state
+  (client as any).reconnectCalled = false;
   
   return client;
 }
@@ -212,13 +184,8 @@ Deno.test("ImapClient - Socket timeout handling", () => {
     return Promise.resolve();
   };
   
-  // Simulate timeout by emitting the timeout event on the connection
-  (client as any).connection.emit = (event: string) => {
-    if (event === "timeout") {
-      timeoutHandled = true;
-    }
-  };
-  (client as any).connection.emit("timeout");
+  // Simulate timeout by directly calling the socket timeout handler
+  (client as any).connection.handleSocketTimeout();
   
   // Verify timeout was handled
   assertEquals(timeoutHandled, true);
@@ -289,8 +256,6 @@ Deno.test("ImapClient - Manual reconnection", async () => {
   const originalReconnect = (client as any).reconnect;
   (client as any).reconnect = async function() {
     reconnectCalled = true;
-    (this as any).emit("reconnecting");
-    (this as any).emit("reconnected", { mailbox: "INBOX" });
     return Promise.resolve();
   };
   
@@ -299,10 +264,6 @@ Deno.test("ImapClient - Manual reconnection", async () => {
   
   // Check that reconnect was called
   assertEquals(reconnectCalled, true);
-  
-  // Check that events were emitted
-  assertEquals((client as any).eventsCalled.reconnecting, 1);
-  assertEquals((client as any).eventsCalled.reconnected, 1);
 });
 
 Deno.test("ImapClient - Reconnection failure", async () => {
@@ -316,8 +277,6 @@ Deno.test("ImapClient - Reconnection failure", async () => {
   
   // Override reconnect to simulate failure
   (client as any).reconnect = async function() {
-    (this as any).emit("reconnecting");
-    (this as any).emit("reconnect_failed", new ImapConnectionError("Reconnection disabled"));
     throw new ImapConnectionError("Reconnection disabled");
   };
   
@@ -326,10 +285,6 @@ Deno.test("ImapClient - Reconnection failure", async () => {
     () => client.forceReconnect(),
     ImapConnectionError
   );
-  
-  // Check that events were emitted
-  assertEquals((client as any).eventsCalled.reconnecting, 1);
-  assertEquals((client as any).eventsCalled.reconnect_failed, 1);
 });
 
 Deno.test("ImapClient - Connection timeout in ImapConnection", async () => {
@@ -381,22 +336,6 @@ Deno.test("ImapClient - Connection timeout in ImapConnection", async () => {
     Error,
     "Not connected to IMAP server"
   );
-});
-
-Deno.test("ImapClient - Event emission on disconnect", () => {
-  const client = createMockClient();
-  
-  // Create a simple event listener
-  let closeCalled = false;
-  client.on("close", () => {
-    closeCalled = true;
-  });
-  
-  // Emit the event directly
-  (client as any).emit("close");
-  
-  // Check that the event was received
-  assertEquals(closeCalled, true);
 });
 
 Deno.test("ImapClient - Retry command after successful reconnection", () => {
