@@ -18,6 +18,7 @@ import type {
   ImapMessage,
   ImapSearchCriteria,
 } from "../types/mod.ts";
+import { hasAttachments } from "../parsers/mod.ts";
 
 /**
  * Fetches all messages in a mailbox
@@ -198,21 +199,9 @@ export async function fetchMessagesWithAttachments(
       return false;
     }
 
-    // Check if the message has attachments
-    // This is a simplified check, a real implementation would be more complex
+    // Use the imported hasAttachments function from the parsers module
     return hasAttachments(message.bodyStructure);
   });
-}
-
-/**
- * Checks if a body structure has attachments
- * @param bodyStructure Body structure to check
- * @returns Whether the body structure has attachments
- */
-function hasAttachments(bodyStructure: any): boolean {
-  // This is a placeholder for a complex function
-  // A real implementation would check for attachment parts
-  return false;
 }
 
 /**

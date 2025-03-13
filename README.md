@@ -123,6 +123,7 @@ import {
   deleteMessages,
   fetchMessagesFromSender,
   fetchUnreadMessages,
+  hasAttachments,
   ImapClient,
   markMessagesAsRead,
 } from 'jsr:@workingdevshero/deno-imap';
@@ -147,6 +148,13 @@ const messagesFromSender = await fetchMessagesFromSender(
   'INBOX',
   'sender@example.com',
 );
+
+// Check if a message has attachments
+for (const message of unreadMessages) {
+  if (message.bodyStructure && hasAttachments(message.bodyStructure)) {
+    console.log(`Message #${message.seq} has attachments`);
+  }
+}
 
 // Mark messages as read using UIDs (more reliable than sequence numbers)
 await markMessagesAsRead(
@@ -230,6 +238,40 @@ new ImapClient(options: ImapOptions)
 - `capabilities`: Server capabilities
 - `selectedMailbox`: Currently selected mailbox
 
+### Utility Functions
+
+#### hasAttachments
+
+Determines if a message has attachments based on its body structure.
+
+```typescript
+hasAttachments(bodyStructure: ImapBodyStructure): boolean
+```
+
+This function analyzes the body structure of an email message to determine if it contains attachments. It considers the following criteria:
+
+- Parts with explicit `ATTACHMENT` disposition
+- Parts with `INLINE` disposition that have a filename
+- Parts with content types like `APPLICATION`, `IMAGE`, `AUDIO`, or `VIDEO`
+- Parts with a `NAME` parameter
+- `MESSAGE/RFC822` parts without a disposition
+
+Example usage:
+
+```typescript
+// Fetch messages with their body structure
+const messages = await client.fetch('1:*', {
+  bodyStructure: true,
+});
+
+// Find messages with attachments
+const messagesWithAttachments = messages.filter(
+  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure)
+);
+
+console.log(`Found ${messagesWithAttachments.length} messages with attachments`);
+```
+
 ## Examples
 
 The [examples](./examples) directory contains sample code demonstrating how to use the IMAP client:
@@ -243,6 +285,7 @@ The [examples](./examples) directory contains sample code demonstrating how to u
   renaming, and deleting them.
 - [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching
   message content, and manipulating messages.
+- [Attachments Example](./examples/attachments.ts): Demonstrates how to use the `hasAttachments` function to find messages with attachments.
 
 To run the examples, create a `.env` file with your IMAP server details, then run:
 
@@ -261,6 +304,9 @@ deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 
 # Run the advanced example
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
+
+# Run the attachments example
+deno run --allow-net --allow-env --env-file=.env examples/attachments.ts
 ```
 
 ## License

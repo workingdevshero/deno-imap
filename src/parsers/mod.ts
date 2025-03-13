@@ -6,12 +6,15 @@
  */
 
 import { ImapParseError } from "../errors.ts";
-import type {
-  ImapAddress,
-  ImapBodyStructure,
-  ImapEnvelope,
-  ImapMailbox,
-} from "../types/mod.ts";
+import type { ImapAddress, ImapEnvelope, ImapMailbox } from "../types/mod.ts";
+import { parseBodyStructure } from "./bodystructure.ts";
+
+// Export bodystructure parser functions directly
+export {
+  findAttachments,
+  hasAttachments,
+  parseBodyStructure,
+} from "./bodystructure.ts";
 
 /**
  * Parses a capability response
@@ -382,24 +385,6 @@ function parseListItems(data: string): string[] {
 }
 
 /**
- * Parses a body structure response
- * @param data Body structure data
- * @returns Body structure object
- */
-export function parseBodyStructure(data: string): ImapBodyStructure {
-  // This is a placeholder for a complex parser
-  // A real implementation would use a proper IMAP parser
-
-  return {
-    type: "text",
-    subtype: "plain",
-    parameters: {},
-    encoding: "7BIT",
-    size: 0,
-  };
-}
-
-/**
  * Parses a fetch response
  * @param lines Fetch response lines
  * @returns Fetch data
@@ -483,9 +468,28 @@ export function parseFetch(lines: string[]): Record<string, unknown> {
     }
 
     if (firstLine.includes("BODYSTRUCTURE")) {
-      const bodyRegex =
-        /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)/i;
-      const bodyMatch = firstLine.match(bodyRegex);
+      // Use a more robust regex pattern that can handle complex nested structures
+      // Try different patterns in order of specificity
+      const bodyRegexPatterns = [
+        /BODYSTRUCTURE \(([^()]*(?:\([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*\)[^()]*)*)\)/i,
+        /BODYSTRUCTURE \((.*)\)/i,
+      ];
+
+      let bodyMatch = null;
+      for (const pattern of bodyRegexPatterns) {
+        bodyMatch = firstLine.match(pattern);
+        if (bodyMatch) break;
+      }
+
+      // If not found in the first line, try joining all lines and searching again
+      if (!bodyMatch && lines.length > 1) {
+        const fullResponse = lines.join(" ");
+        for (const pattern of bodyRegexPatterns) {
+          bodyMatch = fullResponse.match(pattern);
+          if (bodyMatch) break;
+        }
+      }
+
       if (bodyMatch) {
         try {
           result.bodyStructure = parseBodyStructure(`(${bodyMatch[1]})`);
