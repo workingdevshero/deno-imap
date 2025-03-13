@@ -120,4 +120,4 @@ export class ImapCapabilityError extends ImapError {
     this.name = 'ImapCapabilityError';
     this.capability = capability;
   }
-} 
+}

@@ -21,27 +21,27 @@ A heroic IMAP (Internet Message Access Protocol) client for Deno.
 You can import the module directly from the JSR registry:
 
 ```typescript
-import { ImapClient } from "jsr:@workingdevshero/deno-imap";
+import { ImapClient } from 'jsr:@workingdevshero/deno-imap';
 ```
 
 Or import it from GitHub:
 
 ```typescript
-import { ImapClient } from "https://raw.githubusercontent.com/workingdevshero/deno-imap/main/mod.ts";
+import { ImapClient } from 'https://raw.githubusercontent.com/workingdevshero/deno-imap/main/mod.ts';
 ```
 
 ## Basic Usage
 
 ```typescript
-import { ImapClient } from "jsr:@workingdevshero/deno-imap";
+import { ImapClient } from 'jsr:@workingdevshero/deno-imap';
 
 // Create a new IMAP client
 const client = new ImapClient({
-  host: "imap.example.com",
+  host: 'imap.example.com',
   port: 993,
   tls: true,
-  username: "user@example.com",
-  password: "password",
+  username: 'user@example.com',
+  password: 'password',
 });
 
 // Connect and authenticate
@@ -50,31 +50,34 @@ await client.authenticate();
 
 // List mailboxes
 const mailboxes = await client.listMailboxes();
-console.log("Available mailboxes:", mailboxes);
+console.log('Available mailboxes:', mailboxes);
 
 // Select a mailbox
-const inbox = await client.selectMailbox("INBOX");
-console.log("INBOX has", inbox.exists, "messages");
+const inbox = await client.selectMailbox('INBOX');
+console.log('INBOX has', inbox.exists, 'messages');
 
 // Search for unread messages
-const unreadMessages = await client.search({ flags: { has: ["\\Unseen"] } });
-console.log("Unread message IDs:", unreadMessages);
+const unreadMessages = await client.search({ flags: { has: ['\\Unseen'] } });
+console.log('Unread message IDs:', unreadMessages);
 
 // Fetch messages (safely handling mailboxes with fewer than 10 messages)
 const messageCount = inbox.exists || 0;
-const fetchRange = messageCount > 0 ? `1:${Math.min(messageCount, 10)}` : "1";
+const fetchRange = messageCount > 0 ? `1:${Math.min(messageCount, 10)}` : '1';
 
-const messages = await client.fetch(fetchRange, { 
-  envelope: true, 
-  headers: ["Subject", "From", "Date"] 
+const messages = await client.fetch(fetchRange, {
+  envelope: true,
+  headers: ['Subject', 'From', 'Date'],
 });
 
 // Display message details
 for (const message of messages) {
-  console.log("Message #", message.seq);
-  console.log("Subject:", message.envelope?.subject);
-  console.log("From:", message.envelope?.from?.[0]?.mailbox + "@" + message.envelope?.from?.[0]?.host);
-  console.log("Date:", message.envelope?.date);
+  console.log('Message #', message.seq);
+  console.log('Subject:', message.envelope?.subject);
+  console.log(
+    'From:',
+    message.envelope?.from?.[0]?.mailbox + '@' + message.envelope?.from?.[0]?.host,
+  );
+  console.log('Date:', message.envelope?.date);
 }
 
 // Disconnect
@@ -87,11 +90,11 @@ For security and flexibility, you can store your IMAP connection details in envi
 
 ```typescript
 const client = new ImapClient({
-  host: Deno.env.get("IMAP_HOST")!,
-  port: parseInt(Deno.env.get("IMAP_PORT")!),
-  tls: Deno.env.get("IMAP_USE_TLS") !== "false",
-  username: Deno.env.get("IMAP_USERNAME")!,
-  password: Deno.env.get("IMAP_PASSWORD")!,
+  host: Deno.env.get('IMAP_HOST')!,
+  port: parseInt(Deno.env.get('IMAP_PORT')!),
+  tls: Deno.env.get('IMAP_USE_TLS') !== 'false',
+  username: Deno.env.get('IMAP_USERNAME')!,
+  password: Deno.env.get('IMAP_PASSWORD')!,
 });
 ```
 
@@ -116,49 +119,49 @@ deno run --allow-net --allow-env --env-file=.env your_script.ts
 The package includes utility functions for common operations:
 
 ```typescript
-import { 
-  ImapClient,
-  fetchUnreadMessages, 
+import {
+  deleteMessages,
   fetchMessagesFromSender,
+  fetchUnreadMessages,
+  ImapClient,
   markMessagesAsRead,
-  deleteMessages
-} from "jsr:@workingdevshero/deno-imap";
+} from 'jsr:@workingdevshero/deno-imap';
 
 const client = new ImapClient({
-  host: "imap.example.com",
+  host: 'imap.example.com',
   port: 993,
   tls: true,
-  username: "user@example.com",
-  password: "password",
+  username: 'user@example.com',
+  password: 'password',
 });
 
 await client.connect();
 await client.authenticate();
 
 // Fetch unread messages
-const unreadMessages = await fetchUnreadMessages(client, "INBOX");
+const unreadMessages = await fetchUnreadMessages(client, 'INBOX');
 
 // Fetch messages from a specific sender
 const messagesFromSender = await fetchMessagesFromSender(
-  client, 
-  "INBOX", 
-  "sender@example.com"
+  client,
+  'INBOX',
+  'sender@example.com',
 );
 
 // Mark messages as read using UIDs (more reliable than sequence numbers)
 await markMessagesAsRead(
-  client, 
-  "INBOX", 
-  messagesFromSender.map(msg => msg.uid || 0).filter(uid => uid > 0),
-  true // Use UIDs instead of sequence numbers
+  client,
+  'INBOX',
+  messagesFromSender.map((msg) => msg.uid || 0).filter((uid) => uid > 0),
+  true, // Use UIDs instead of sequence numbers
 );
 
 // Delete messages
 await deleteMessages(
-  client, 
-  "INBOX", 
-  unreadMessages.slice(0, 5).map(msg => msg.uid || 0).filter(uid => uid > 0),
-  true // Use UIDs instead of sequence numbers
+  client,
+  'INBOX',
+  unreadMessages.slice(0, 5).map((msg) => msg.uid || 0).filter((uid) => uid > 0),
+  true, // Use UIDs instead of sequence numbers
 );
 
 client.disconnect();
@@ -210,11 +213,15 @@ new ImapClient(options: ImapOptions)
 - `unsubscribeMailbox(mailbox: string)`: Unsubscribes from a mailbox
 - `search(criteria: ImapSearchCriteria, charset?: string)`: Searches for messages
 - `fetch(sequence: string, options: ImapFetchOptions)`: Fetches messages
-- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`: Sets flags on messages
-- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another mailbox
-- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another mailbox
+- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`:
+  Sets flags on messages
+- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another
+  mailbox
+- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another
+  mailbox
 - `expunge()`: Expunges deleted messages
-- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a message to a mailbox
+- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a
+  message to a mailbox
 
 #### Properties
 
@@ -227,11 +234,15 @@ new ImapClient(options: ImapOptions)
 
 The [examples](./examples) directory contains sample code demonstrating how to use the IMAP client:
 
-- [Basic Example](./examples/basic.ts): Demonstrates connecting to an IMAP server, listing mailboxes, and checking the INBOX status.
+- [Basic Example](./examples/basic.ts): Demonstrates connecting to an IMAP server, listing
+  mailboxes, and checking the INBOX status.
 - [Search Example](./examples/search.ts): Shows how to search for messages using various criteria.
-- [Fetch Example](./examples/fetch.ts): Demonstrates how to fetch and decode message content, including handling multipart messages and different encodings.
-- [Mailboxes Example](./examples/mailboxes.ts): Shows how to manage mailboxes, including creating, renaming, and deleting them.
-- [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching message content, and manipulating messages.
+- [Fetch Example](./examples/fetch.ts): Demonstrates how to fetch and decode message content,
+  including handling multipart messages and different encodings.
+- [Mailboxes Example](./examples/mailboxes.ts): Shows how to manage mailboxes, including creating,
+  renaming, and deleting them.
+- [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching
+  message content, and manipulating messages.
 
 To run the examples, create a `.env` file with your IMAP server details, then run:
 
@@ -254,4 +265,4 @@ deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
 
 ## License
 
-MIT 
+MIT

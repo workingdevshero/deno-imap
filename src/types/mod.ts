@@ -324,4 +324,4 @@ export type ImapCapability =
   | 'LIST-EXTENDED'
   | 'LIST-STATUS'
   | 'SPECIAL-USE'
-  | string; 
+  | string;
