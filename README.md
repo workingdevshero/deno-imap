@@ -350,7 +350,7 @@ deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
 
 # Run the attachments example
-deno run --allow-net --allow-env --env-file=.env examples/attachments.ts
+deno run --allow-net --allow-env --env-file=.env --allow-write --allow-read examples/attachments.ts
 ```
 
 ## Working with Attachments

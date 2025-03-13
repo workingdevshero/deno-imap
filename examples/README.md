@@ -74,7 +74,7 @@ The attachments example demonstrates how to work with email attachments. It show
 4. Handle different attachment types
 
 ```bash
-deno run --allow-net --allow-env --env-file=.env examples/attachments.ts
+deno run --allow-net --allow-env --env-file=.env --allow-write --allow-read examples/attachments.ts
 ```
 
 ## Notes
