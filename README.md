@@ -222,15 +222,14 @@ new ImapClient(options: ImapOptions)
 - `unsubscribeMailbox(mailbox: string)`: Unsubscribes from a mailbox
 - `search(criteria: ImapSearchCriteria, charset?: string)`: Searches for messages
 - `fetch(sequence: string, options: ImapFetchOptions)`: Fetches messages
-- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`:
-  Sets flags on messages
-- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another
-  mailbox
-- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another
-  mailbox
+- `setFlags(sequence: string, flags: string[], action?: "set" | "add" | "remove", useUid?: boolean)`: Sets flags on messages
+- `copyMessages(sequence: string, mailbox: string, useUid?: boolean)`: Copies messages to another mailbox
+- `moveMessages(sequence: string, mailbox: string, useUid?: boolean)`: Moves messages to another mailbox
 - `expunge()`: Expunges deleted messages
-- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a
-  message to a mailbox
+- `appendMessage(mailbox: string, message: string, flags?: string[], date?: Date)`: Appends a message to a mailbox
+- `forceReconnect()`: Forces a reconnection to the server
+- `updateCapabilities()`: Updates the server capabilities
+- `close()`: Closes the connection (alias for disconnect)
 
 #### Properties
 
@@ -238,8 +237,52 @@ new ImapClient(options: ImapOptions)
 - `authenticated`: Whether the client is authenticated
 - `capabilities`: Server capabilities
 - `selectedMailbox`: Currently selected mailbox
+- `reconnecting`: Whether a reconnection is in progress
 
 ### Utility Functions
+
+The package includes utility functions for common operations:
+
+#### Message Retrieval
+
+- `fetchAllMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches all messages in a mailbox
+- `searchAndFetchMessages(client: ImapClient, mailbox: string, criteria: ImapSearchCriteria, options?: ImapFetchOptions)`: Fetches messages matching search criteria
+- `fetchUnreadMessages(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches unread messages
+- `fetchMessagesFromSender(client: ImapClient, mailbox: string, sender: string, options?: ImapFetchOptions)`: Fetches messages from a specific sender
+- `fetchMessagesWithSubject(client: ImapClient, mailbox: string, subject: string, options?: ImapFetchOptions)`: Fetches messages with a specific subject
+- `fetchMessagesSince(client: ImapClient, mailbox: string, since: Date, options?: ImapFetchOptions)`: Fetches messages received since a specific date
+- `fetchMessagesWithAttachments(client: ImapClient, mailbox: string, options?: ImapFetchOptions)`: Fetches messages with attachments
+
+#### Message Management
+
+- `markMessagesAsRead(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Marks messages as read
+- `markMessagesAsUnread(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Marks messages as unread
+- `deleteMessages(client: ImapClient, mailbox: string, messageIds: number[], useUid?: boolean)`: Deletes messages
+- `moveMessages(client: ImapClient, sourceMailbox: string, targetMailbox: string, messageIds: number[], useUid?: boolean)`: Moves messages between mailboxes
+
+#### Mailbox Management
+
+- `createMailboxHierarchy(client: ImapClient, path: string, delimiter?: string)`: Creates a mailbox hierarchy
+- `getMailboxHierarchy(client: ImapClient, reference?: string, pattern?: string)`: Gets the mailbox hierarchy
+
+#### Attachment Handling
+
+- `hasAttachments(bodyStructure: ImapBodyStructure)`: Determines if a message has attachments
+- `findAttachments(bodyStructure: ImapBodyStructure, path?: string)`: Extracts detailed information about attachments
+- `decodeAttachment(data: Uint8Array, encoding: string)`: Decodes an attachment based on its encoding
+
+#### Parser Functions
+
+- `parseBodyStructure(data: string)`: Parses a body structure response
+- `parseCapabilities(line: string)`: Parses a capability response
+- `parseEnvelope(data: string)`: Parses an envelope response
+- `parseFetch(lines: string[])`: Parses a fetch response
+- `parseListResponse(line: string)`: Parses a list response
+- `parseSearch(line: string)`: Parses a search response
+- `parseSelect(lines: string[])`: Parses a select response
+- `parseStatus(line: string)`: Parses a status response
+
+### Attachment Handling
 
 #### hasAttachments
 
@@ -249,8 +292,7 @@ Determines if a message has attachments based on its body structure.
 hasAttachments(bodyStructure: ImapBodyStructure): boolean
 ```
 
-This function analyzes the body structure of an email message to determine if it contains
-attachments. It considers the following criteria:
+This function analyzes the body structure of an email message to determine if it contains attachments. It considers the following criteria:
 
 - Parts with explicit `ATTACHMENT` disposition
 - Parts with `INLINE` disposition that have a filename
@@ -258,21 +300,29 @@ attachments. It considers the following criteria:
 - Parts with a `NAME` parameter
 - `MESSAGE/RFC822` parts without a disposition
 
-Example usage:
+#### findAttachments
+
+Extracts detailed information about attachments from a message's body structure.
 
 ```typescript
-// Fetch messages with their body structure
-const messages = await client.fetch('1:*', {
-  bodyStructure: true,
-});
-
-// Find messages with attachments
-const messagesWithAttachments = messages.filter(
-  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
-);
-
-console.log(`Found ${messagesWithAttachments.length} messages with attachments`);
+findAttachments(bodyStructure: ImapBodyStructure, path?: string): Array<{
+  filename: string;
+  type: string;
+  subtype: string;
+  size: number;
+  encoding: string;
+  section: string;
+}>
 ```
+
+This function analyzes the body structure of an email message and returns an array of attachment objects with detailed information about each attachment, including:
+
+- `filename`: The name of the attachment file
+- `type`: The MIME type (e.g., "IMAGE", "APPLICATION")
+- `subtype`: The MIME subtype (e.g., "PNG", "PDF")
+- `size`: The size of the attachment in bytes
+- `encoding`: The content transfer encoding (e.g., "BASE64", "QUOTED-PRINTABLE")
+- `section`: The IMAP section path used to fetch the attachment
 
 #### decodeAttachment
 
@@ -287,32 +337,6 @@ This function handles different encoding types:
 - `BASE64`: Converts base64 to binary
 - `QUOTED-PRINTABLE`: Decodes quoted-printable
 - `7BIT`, `8BIT`, `BINARY`: Returns the data as is (no decoding needed)
-
-Example usage:
-
-```typescript
-// Fetch the attachment data
-const fetchResult = await client.fetch(`${message.seq}`, {
-  bodyParts: [attachment.section],
-});
-
-if (
-  fetchResult.length > 0 &&
-  fetchResult[0].parts &&
-  fetchResult[0].parts[attachment.section]
-) {
-  const attachmentData = fetchResult[0].parts[attachment.section];
-
-  // Decode the attachment based on its encoding
-  const decodedData = decodeAttachment(
-    attachmentData.data as Uint8Array,
-    attachment.encoding,
-  );
-
-  // Save the attachment to a file
-  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
-}
-```
 
 ## Examples
 
@@ -352,84 +376,6 @@ deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
 # Run the attachments example
 deno run --allow-net --allow-env --env-file=.env --allow-write --allow-read examples/attachments.ts
 ```
-
-## Working with Attachments
-
-The library provides utilities for working with email attachments:
-
-### Finding Attachments
-
-Use the `hasAttachments` function to determine if a message has attachments:
-
-```typescript
-import { hasAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
-
-// Fetch messages with their body structure
-const messages = await client.fetch('1:*', {
-  bodyStructure: true,
-});
-
-// Find messages with attachments
-const messagesWithAttachments = messages.filter(
-  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
-);
-```
-
-### Getting Attachment Details
-
-The `findAttachments` function extracts detailed information about attachments:
-
-```typescript
-import { findAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
-
-// Get attachment details from a message's body structure
-if (message.bodyStructure) {
-  const attachments = findAttachments(message.bodyStructure);
-
-  for (const attachment of attachments) {
-    console.log(`Filename: ${attachment.filename}`);
-    console.log(`Type: ${attachment.type}/${attachment.subtype}`);
-    console.log(`Size: ${attachment.size} bytes`);
-    console.log(`Section: ${attachment.section}`);
-    console.log(`Encoding: ${attachment.encoding}`);
-  }
-}
-```
-
-### Fetching and Decoding Attachments
-
-When fetching attachments, you need to decode the data based on its encoding:
-
-```typescript
-import { decodeAttachment } from 'jsr:@workingdevshero/deno-imap';
-
-// Fetch the attachment data
-const fetchResult = await client.fetch(`${message.seq}`, {
-  bodyParts: [attachment.section],
-});
-
-if (
-  fetchResult.length > 0 &&
-  fetchResult[0].parts &&
-  fetchResult[0].parts[attachment.section]
-) {
-  const attachmentData = fetchResult[0].parts[attachment.section];
-
-  // Decode the attachment based on its encoding
-  const decodedData = decodeAttachment(
-    attachmentData.data as Uint8Array,
-    attachment.encoding,
-  );
-
-  // Save the attachment to a file
-  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
-}
-```
-
-The `decodeAttachment` function handles different encoding types (BASE64, QUOTED-PRINTABLE, 7BIT,
-8BIT, BINARY) automatically.
-
-For a complete implementation, see the [Attachments Example](./examples/attachments.ts).
 
 ## License
 
