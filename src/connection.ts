@@ -1,17 +1,17 @@
 /**
  * IMAP Connection module
- * 
+ *
  * Handles the low-level socket communication with the IMAP server.
  * @module
  */
 
-import { ImapConnectionOptions } from "./types/mod.ts";
 import {
   ImapConnectionError,
   ImapError,
   ImapNotConnectedError,
   ImapTimeoutError,
 } from "./errors.ts";
+import type { ImapConnectionOptions } from "./types/mod.ts";
 
 /**
  * Default connection timeout in milliseconds
@@ -72,8 +72,10 @@ export class ImapConnection {
   constructor(options: ImapConnectionOptions) {
     this.options = {
       ...options,
-      port: options.port || (options.tls ? DEFAULT_PORTS.tls : DEFAULT_PORTS.plain),
-      connectionTimeout: options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT,
+      port:
+        options.port || (options.tls ? DEFAULT_PORTS.tls : DEFAULT_PORTS.plain),
+      connectionTimeout:
+        options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT,
       socketTimeout: options.socketTimeout || DEFAULT_SOCKET_TIMEOUT,
     };
   }
@@ -105,7 +107,10 @@ export class ImapConnection {
       const connectionTimeoutPromise = new Promise<never>((_, reject) => {
         this.connectionTimeoutTimer = setTimeout(() => {
           reject(
-            new ImapTimeoutError("connect", this.options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT),
+            new ImapTimeoutError(
+              "connect",
+              this.options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT
+            )
           );
         }, this.options.connectionTimeout || DEFAULT_CONNECTION_TIMEOUT);
       });
@@ -125,11 +130,14 @@ export class ImapConnection {
     } catch (error) {
       // Clean up if connection fails
       this.cleanup();
-      
+
       if (error instanceof ImapError) {
         throw error;
       } else {
-        throw new ImapConnectionError(`Failed to connect to ${this.options.host}:${this.options.port}`, error instanceof Error ? error : new Error(String(error)));
+        throw new ImapConnectionError(
+          `Failed to connect to ${this.options.host}:${this.options.port}`,
+          error instanceof Error ? error : new Error(String(error))
+        );
       }
     }
   }
@@ -157,7 +165,7 @@ export class ImapConnection {
       }
     } catch (error) {
       throw new ImapConnectionError(
-        `Failed to connect to ${this.options.host}:${this.options.port}`, 
+        `Failed to connect to ${this.options.host}:${this.options.port}`,
         error instanceof Error ? error : new Error(String(error))
       );
     }
@@ -185,8 +193,11 @@ export class ImapConnection {
     // Instead of throwing an exception directly, mark the connection as timed out
     // and close it. Subsequent read/write operations will fail with a timeout error.
     this._socketTimedOut = true;
-    this.socketTimeoutError = new ImapTimeoutError("socket", this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT);
-    
+    this.socketTimeoutError = new ImapTimeoutError(
+      "socket",
+      this.options.socketTimeout || DEFAULT_SOCKET_TIMEOUT
+    );
+
     // Clean up the connection
     this.cleanup();
   }
@@ -261,7 +272,7 @@ export class ImapConnection {
     } catch (error) {
       this.cleanup();
       throw new ImapConnectionError(
-        "Failed to write to socket", 
+        "Failed to write to socket",
         error instanceof Error ? error : new Error(String(error))
       );
     }
@@ -301,7 +312,7 @@ export class ImapConnection {
 
     try {
       const bytesRead = await conn.read(this.buffer);
-      
+
       if (bytesRead === null) {
         // Connection closed
         this.cleanup();
@@ -313,7 +324,7 @@ export class ImapConnection {
     } catch (error) {
       this.cleanup();
       throw new ImapConnectionError(
-        "Failed to read from socket", 
+        "Failed to read from socket",
         error instanceof Error ? error : new Error(String(error))
       );
     }
@@ -331,7 +342,7 @@ export class ImapConnection {
 
     // Check if we have a line in the buffer
     const crlfIndex = this.bufferedData.indexOf(CRLF);
-    
+
     if (crlfIndex !== -1) {
       // We have a line in the buffer
       const line = this.bufferedData.substring(0, crlfIndex);
@@ -352,18 +363,20 @@ export class ImapConnection {
    * @param terminator Function that determines when to stop reading
    * @returns Promise that resolves with the lines
    */
-  async readUntil(terminator: (line: string, accumulatedLines: string[]) => boolean): Promise<string[]> {
+  async readUntil(
+    terminator: (line: string, accumulatedLines: string[]) => boolean
+  ): Promise<string[]> {
     const lines: string[] = [];
-    
+
     while (true) {
       const line = await this.readLine();
       lines.push(line);
-      
+
       if (terminator(line, lines)) {
         break;
       }
     }
-    
+
     return lines;
   }
-} 
+}
