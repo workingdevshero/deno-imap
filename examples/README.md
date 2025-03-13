@@ -64,6 +64,19 @@ fetching message content, and manipulating messages.
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
 ```
 
+### Finding Messages with Attachments
+
+The attachments example demonstrates how to work with email attachments. It shows how to:
+
+1. Find messages with attachments in a mailbox
+2. Extract attachment information (filename, type, size, etc.)
+3. Fetch attachment content
+4. Handle different attachment types
+
+```bash
+deno run --allow-net --allow-env --env-file=.env --allow-write --allow-read examples/attachments.ts
+```
+
 ## Notes
 
 - All examples include proper error handling and ensure the connection is closed properly.

@@ -120,9 +120,11 @@ The package includes utility functions for common operations:
 
 ```typescript
 import {
+  decodeAttachment,
   deleteMessages,
   fetchMessagesFromSender,
   fetchUnreadMessages,
+  hasAttachments,
   ImapClient,
   markMessagesAsRead,
 } from 'jsr:@workingdevshero/deno-imap';
@@ -147,6 +149,13 @@ const messagesFromSender = await fetchMessagesFromSender(
   'INBOX',
   'sender@example.com',
 );
+
+// Check if a message has attachments
+for (const message of unreadMessages) {
+  if (message.bodyStructure && hasAttachments(message.bodyStructure)) {
+    console.log(`Message #${message.seq} has attachments`);
+  }
+}
 
 // Mark messages as read using UIDs (more reliable than sequence numbers)
 await markMessagesAsRead(
@@ -230,6 +239,81 @@ new ImapClient(options: ImapOptions)
 - `capabilities`: Server capabilities
 - `selectedMailbox`: Currently selected mailbox
 
+### Utility Functions
+
+#### hasAttachments
+
+Determines if a message has attachments based on its body structure.
+
+```typescript
+hasAttachments(bodyStructure: ImapBodyStructure): boolean
+```
+
+This function analyzes the body structure of an email message to determine if it contains
+attachments. It considers the following criteria:
+
+- Parts with explicit `ATTACHMENT` disposition
+- Parts with `INLINE` disposition that have a filename
+- Parts with content types like `APPLICATION`, `IMAGE`, `AUDIO`, or `VIDEO`
+- Parts with a `NAME` parameter
+- `MESSAGE/RFC822` parts without a disposition
+
+Example usage:
+
+```typescript
+// Fetch messages with their body structure
+const messages = await client.fetch('1:*', {
+  bodyStructure: true,
+});
+
+// Find messages with attachments
+const messagesWithAttachments = messages.filter(
+  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
+);
+
+console.log(`Found ${messagesWithAttachments.length} messages with attachments`);
+```
+
+#### decodeAttachment
+
+Decodes an attachment based on its encoding.
+
+```typescript
+decodeAttachment(data: Uint8Array, encoding: string): Uint8Array
+```
+
+This function handles different encoding types:
+
+- `BASE64`: Converts base64 to binary
+- `QUOTED-PRINTABLE`: Decodes quoted-printable
+- `7BIT`, `8BIT`, `BINARY`: Returns the data as is (no decoding needed)
+
+Example usage:
+
+```typescript
+// Fetch the attachment data
+const fetchResult = await client.fetch(`${message.seq}`, {
+  bodyParts: [attachment.section],
+});
+
+if (
+  fetchResult.length > 0 &&
+  fetchResult[0].parts &&
+  fetchResult[0].parts[attachment.section]
+) {
+  const attachmentData = fetchResult[0].parts[attachment.section];
+
+  // Decode the attachment based on its encoding
+  const decodedData = decodeAttachment(
+    attachmentData.data as Uint8Array,
+    attachment.encoding,
+  );
+
+  // Save the attachment to a file
+  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
+}
+```
+
 ## Examples
 
 The [examples](./examples) directory contains sample code demonstrating how to use the IMAP client:
@@ -243,6 +327,9 @@ The [examples](./examples) directory contains sample code demonstrating how to u
   renaming, and deleting them.
 - [Advanced Example](./examples/advanced.ts): Shows more advanced features like searching, fetching
   message content, and manipulating messages.
+- [Attachments Example](./examples/attachments.ts): Demonstrates how to find messages with
+  attachments, fetch attachment data, properly decode it based on the encoding (BASE64,
+  QUOTED-PRINTABLE, etc.), and save attachments to a local folder.
 
 To run the examples, create a `.env` file with your IMAP server details, then run:
 
@@ -261,7 +348,88 @@ deno run --allow-net --allow-env --env-file=.env examples/mailboxes.ts
 
 # Run the advanced example
 deno run --allow-net --allow-env --env-file=.env examples/advanced.ts
+
+# Run the attachments example
+deno run --allow-net --allow-env --env-file=.env --allow-write --allow-read examples/attachments.ts
 ```
+
+## Working with Attachments
+
+The library provides utilities for working with email attachments:
+
+### Finding Attachments
+
+Use the `hasAttachments` function to determine if a message has attachments:
+
+```typescript
+import { hasAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
+
+// Fetch messages with their body structure
+const messages = await client.fetch('1:*', {
+  bodyStructure: true,
+});
+
+// Find messages with attachments
+const messagesWithAttachments = messages.filter(
+  (msg) => msg.bodyStructure && hasAttachments(msg.bodyStructure),
+);
+```
+
+### Getting Attachment Details
+
+The `findAttachments` function extracts detailed information about attachments:
+
+```typescript
+import { findAttachments, ImapClient } from 'jsr:@workingdevshero/deno-imap';
+
+// Get attachment details from a message's body structure
+if (message.bodyStructure) {
+  const attachments = findAttachments(message.bodyStructure);
+
+  for (const attachment of attachments) {
+    console.log(`Filename: ${attachment.filename}`);
+    console.log(`Type: ${attachment.type}/${attachment.subtype}`);
+    console.log(`Size: ${attachment.size} bytes`);
+    console.log(`Section: ${attachment.section}`);
+    console.log(`Encoding: ${attachment.encoding}`);
+  }
+}
+```
+
+### Fetching and Decoding Attachments
+
+When fetching attachments, you need to decode the data based on its encoding:
+
+```typescript
+import { decodeAttachment } from 'jsr:@workingdevshero/deno-imap';
+
+// Fetch the attachment data
+const fetchResult = await client.fetch(`${message.seq}`, {
+  bodyParts: [attachment.section],
+});
+
+if (
+  fetchResult.length > 0 &&
+  fetchResult[0].parts &&
+  fetchResult[0].parts[attachment.section]
+) {
+  const attachmentData = fetchResult[0].parts[attachment.section];
+
+  // Decode the attachment based on its encoding
+  const decodedData = decodeAttachment(
+    attachmentData.data as Uint8Array,
+    attachment.encoding,
+  );
+
+  // Save the attachment to a file
+  await Deno.writeFile('path/to/save/' + attachment.filename, decodedData);
+}
+```
+
+The `decodeAttachment` function handles different encoding types (BASE64, QUOTED-PRINTABLE, 7BIT,
+8BIT, BINARY) automatically.
+
+For a complete implementation, see the [Attachments Example](./examples/attachments.ts).
 
 ## License
 

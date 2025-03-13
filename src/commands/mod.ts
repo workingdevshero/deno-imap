@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { ImapFetchOptions, ImapSearchCriteria } from "../types/mod.ts";
+import type { ImapFetchOptions, ImapSearchCriteria } from '../types/mod.ts';
 
 /**
  * Generates a LOGIN command
@@ -22,7 +22,7 @@ export function login(username: string, password: string): string {
  * @returns CAPABILITY command string
  */
 export function capability(): string {
-  return "CAPABILITY";
+  return 'CAPABILITY';
 }
 
 /**
@@ -30,7 +30,7 @@ export function capability(): string {
  * @returns NOOP command string
  */
 export function noop(): string {
-  return "NOOP";
+  return 'NOOP';
 }
 
 /**
@@ -38,7 +38,7 @@ export function noop(): string {
  * @returns LOGOUT command string
  */
 export function logout(): string {
-  return "LOGOUT";
+  return 'LOGOUT';
 }
 
 /**
@@ -49,7 +49,7 @@ export function logout(): string {
  */
 export function list(reference: string, mailbox: string): string {
   // Always quote the reference parameter, especially when it's empty
-  const quotedReference = reference === "" ? '""' : quoteString(reference);
+  const quotedReference = reference === '' ? '""' : quoteString(reference);
   return `LIST ${quotedReference} ${quoteString(mailbox)}`;
 }
 
@@ -124,7 +124,7 @@ export function unsubscribe(mailbox: string): string {
  * @returns STATUS command string
  */
 export function status(mailbox: string, items: string[]): string {
-  return `STATUS ${quoteString(mailbox)} (${items.join(" ")})`;
+  return `STATUS ${quoteString(mailbox)} (${items.join(' ')})`;
 }
 
 /**
@@ -139,12 +139,12 @@ export function append(
   mailbox: string,
   message: string,
   flags?: string[],
-  date?: Date
+  date?: Date,
 ): string {
   let command = `APPEND ${quoteString(mailbox)}`;
 
   if (flags && flags.length > 0) {
-    command += ` (${flags.join(" ")})`;
+    command += ` (${flags.join(' ')})`;
   }
 
   if (date) {
@@ -161,7 +161,7 @@ export function append(
  * @returns CHECK command string
  */
 export function check(): string {
-  return "CHECK";
+  return 'CHECK';
 }
 
 /**
@@ -169,7 +169,7 @@ export function check(): string {
  * @returns CLOSE command string
  */
 export function close(): string {
-  return "CLOSE";
+  return 'CLOSE';
 }
 
 /**
@@ -177,7 +177,7 @@ export function close(): string {
  * @returns EXPUNGE command string
  */
 export function expunge(): string {
-  return "EXPUNGE";
+  return 'EXPUNGE';
 }
 
 /**
@@ -187,7 +187,7 @@ export function expunge(): string {
  * @returns SEARCH command string
  */
 export function search(criteria: ImapSearchCriteria, charset?: string): string {
-  let command = "SEARCH";
+  let command = 'SEARCH';
 
   if (charset) {
     command += ` CHARSET ${charset}`;
@@ -197,7 +197,7 @@ export function search(criteria: ImapSearchCriteria, charset?: string): string {
 
   // If no criteria were provided, use ALL as the default
   if (!formattedCriteria) {
-    command += " ALL";
+    command += ' ALL';
   } else {
     command += ` ${formattedCriteria}`;
   }
@@ -212,50 +212,50 @@ export function search(criteria: ImapSearchCriteria, charset?: string): string {
  * @returns FETCH command string
  */
 export function fetch(sequence: string, options: ImapFetchOptions): string {
-  const command = options.byUid ? "UID FETCH" : "FETCH";
+  const command = options.byUid ? 'UID FETCH' : 'FETCH';
   const items: string[] = [];
 
   if (options.flags) {
-    items.push("FLAGS");
+    items.push('FLAGS');
   }
 
   if (options.envelope) {
-    items.push("ENVELOPE");
+    items.push('ENVELOPE');
   }
 
   if (options.bodyStructure) {
-    items.push("BODYSTRUCTURE");
+    items.push('BODYSTRUCTURE');
   }
 
   if (options.internalDate) {
-    items.push("INTERNALDATE");
+    items.push('INTERNALDATE');
   }
 
   if (options.size) {
-    items.push("RFC822.SIZE");
+    items.push('RFC822.SIZE');
   }
 
   if (options.uid) {
-    items.push("UID");
+    items.push('UID');
   }
 
   if (options.allHeaders) {
-    items.push("BODY.PEEK[HEADER]");
+    items.push('BODY.PEEK[HEADER]');
   } else if (options.headers && options.headers.length > 0) {
-    items.push(`BODY.PEEK[HEADER.FIELDS (${options.headers.join(" ")})]`);
+    items.push(`BODY.PEEK[HEADER.FIELDS (${options.headers.join(' ')})]`);
   }
 
   if (options.bodyParts && options.bodyParts.length > 0) {
     for (const part of options.bodyParts) {
-      items.push(`BODY${options.markSeen ? "" : ".PEEK"}[${part}]`);
+      items.push(`BODY${options.markSeen ? '' : '.PEEK'}[${part}]`);
     }
   }
 
   if (options.full) {
-    items.push(`BODY${options.markSeen ? "" : ".PEEK"}[]`);
+    items.push(`BODY${options.markSeen ? '' : '.PEEK'}[]`);
   }
 
-  return `${command} ${sequence} (${items.join(" ")})`;
+  return `${command} ${sequence} (${items.join(' ')})`;
 }
 
 /**
@@ -269,25 +269,25 @@ export function fetch(sequence: string, options: ImapFetchOptions): string {
 export function store(
   sequence: string,
   flags: string[],
-  action: "set" | "add" | "remove",
-  useUid = false
+  action: 'set' | 'add' | 'remove',
+  useUid = false,
 ): string {
-  const command = useUid ? "UID STORE" : "STORE";
+  const command = useUid ? 'UID STORE' : 'STORE';
   let flagAction: string;
 
   switch (action) {
-    case "set":
-      flagAction = "FLAGS";
+    case 'set':
+      flagAction = 'FLAGS';
       break;
-    case "add":
-      flagAction = "+FLAGS";
+    case 'add':
+      flagAction = '+FLAGS';
       break;
-    case "remove":
-      flagAction = "-FLAGS";
+    case 'remove':
+      flagAction = '-FLAGS';
       break;
   }
 
-  return `${command} ${sequence} ${flagAction} (${flags.join(" ")})`;
+  return `${command} ${sequence} ${flagAction} (${flags.join(' ')})`;
 }
 
 /**
@@ -300,9 +300,9 @@ export function store(
 export function copy(
   sequence: string,
   mailbox: string,
-  useUid = false
+  useUid = false,
 ): string {
-  const command = useUid ? "UID COPY" : "COPY";
+  const command = useUid ? 'UID COPY' : 'COPY';
   return `${command} ${sequence} ${quoteString(mailbox)}`;
 }
 
@@ -316,9 +316,9 @@ export function copy(
 export function move(
   sequence: string,
   mailbox: string,
-  useUid = false
+  useUid = false,
 ): string {
-  const command = useUid ? "UID MOVE" : "MOVE";
+  const command = useUid ? 'UID MOVE' : 'MOVE';
   return `${command} ${sequence} ${quoteString(mailbox)}`;
 }
 
@@ -328,31 +328,31 @@ export function move(
  * @returns Formatted date string
  */
 function formatDate(date: Date): string {
-  const day = date.getDate().toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, '0');
   const month = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ][date.getMonth()];
   const year = date.getFullYear();
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const seconds = date.getSeconds().toString().padStart(2, "0");
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
   const offset = Math.abs(date.getTimezoneOffset());
   const offsetHours = Math.floor(offset / 60)
     .toString()
-    .padStart(2, "0");
-  const offsetMinutes = (offset % 60).toString().padStart(2, "0");
-  const offsetSign = date.getTimezoneOffset() > 0 ? "-" : "+";
+    .padStart(2, '0');
+  const offsetMinutes = (offset % 60).toString().padStart(2, '0');
+  const offsetSign = date.getTimezoneOffset() > 0 ? '-' : '+';
 
   return `"${day}-${month}-${year} ${hours}:${minutes}:${seconds} ${offsetSign}${offsetHours}${offsetMinutes}"`;
 }
@@ -367,7 +367,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
 
   if (criteria.seqno !== undefined) {
     if (Array.isArray(criteria.seqno)) {
-      parts.push(criteria.seqno.join(","));
+      parts.push(criteria.seqno.join(','));
     } else {
       parts.push(criteria.seqno.toString());
     }
@@ -375,7 +375,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
 
   if (criteria.uid !== undefined) {
     if (Array.isArray(criteria.uid)) {
-      parts.push(`UID ${criteria.uid.join(",")}`);
+      parts.push(`UID ${criteria.uid.join(',')}`);
     } else {
       parts.push(`UID ${criteria.uid}`);
     }
@@ -385,7 +385,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
     if (criteria.flags.has) {
       for (const flag of criteria.flags.has) {
         // Convert flag names like \Unseen to UNSEEN for the SEARCH command
-        const flagName = flag.replace(/^\\/, "").toUpperCase();
+        const flagName = flag.replace(/^\\/, '').toUpperCase();
         parts.push(flagName);
       }
     }
@@ -393,7 +393,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
     if (criteria.flags.not) {
       for (const flag of criteria.flags.not) {
         // Convert flag names like \Unseen to UNSEEN for the SEARCH command
-        const flagName = flag.replace(/^\\/, "").toUpperCase();
+        const flagName = flag.replace(/^\\/, '').toUpperCase();
         parts.push(`NOT ${flagName}`);
       }
     }
@@ -442,7 +442,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
   if (criteria.header) {
     for (const header of criteria.header) {
       parts.push(
-        `HEADER ${quoteString(header.field)} ${quoteString(header.value)}`
+        `HEADER ${quoteString(header.field)} ${quoteString(header.value)}`,
       );
     }
   }
@@ -457,7 +457,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
 
   if (criteria.and && criteria.and.length > 0) {
     const andParts = criteria.and.map((c) => formatSearchCriteria(c));
-    parts.push(`(${andParts.join(" ")})`);
+    parts.push(`(${andParts.join(' ')})`);
   }
 
   if (criteria.or && criteria.or.length > 0) {
@@ -469,7 +469,7 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
     parts.push(`NOT (${formatSearchCriteria(criteria.not)})`);
   }
 
-  return parts.join(" ");
+  return parts.join(' ');
 }
 
 /**
@@ -478,20 +478,20 @@ function formatSearchCriteria(criteria: ImapSearchCriteria): string {
  * @returns Formatted date string
  */
 function formatDateShort(date: Date): string {
-  const day = date.getDate().toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, '0');
   const month = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ][date.getMonth()];
   const year = date.getFullYear();
 
@@ -506,7 +506,7 @@ function formatDateShort(date: Date): string {
 function quoteString(str: string): string {
   // If the string contains special characters, quote it
   if (/[\r\n\t\\\"\(\)\{\}\[\] ]/.test(str)) {
-    return `"${str.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    return `"${str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
   }
 
   return str;

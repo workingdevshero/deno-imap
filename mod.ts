@@ -12,9 +12,24 @@ export { ImapClient } from './src/client.ts';
 export { ImapConnection } from './src/connection.ts';
 export { ImapAuthError, ImapCommandError, ImapError } from './src/errors.ts';
 
+// Export parsers
+export {
+  findAttachments,
+  hasAttachments,
+  parseBodyStructure,
+  parseCapabilities,
+  parseEnvelope,
+  parseFetch,
+  parseListResponse,
+  parseSearch,
+  parseSelect,
+  parseStatus,
+} from './src/parsers/mod.ts';
+
 // Export utility functions
 export {
   createMailboxHierarchy,
+  decodeAttachment,
   deleteMessages,
   fetchAllMessages,
   fetchMessagesFromSender,
