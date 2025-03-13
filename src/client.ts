@@ -88,6 +88,22 @@ export class ImapClient {
     new Map();
 
   /**
+   * Symbol.dispose implementation for automatic resource cleanup
+   * when used with the 'using' keyword in TypeScript 5.2+
+   */
+  [Symbol.dispose](): void {
+    this.disconnect();
+  }
+
+  /**
+   * Symbol.asyncDispose implementation for automatic resource cleanup
+   * when used with the 'await using' keyword in TypeScript 5.2+
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.disconnect();
+  }
+
+  /**
    * Creates a new IMAP client
    * @param options Client options
    */
