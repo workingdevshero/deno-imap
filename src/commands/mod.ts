@@ -151,7 +151,8 @@ export function append(
     command += ` ${formatDate(date)}`;
   }
 
-  command += ` {${message.length}}`;
+  const messageBytes = new TextEncoder().encode(message).length;
+  command += ` {${messageBytes}}`;
 
   return command;
 }
