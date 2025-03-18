@@ -1,6 +1,6 @@
 {
   "name": "@workingdevshero/deno-imap",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A heroic IMAP client for Deno",
   "tasks": {
     "dev": "deno run --watch mod.ts",
