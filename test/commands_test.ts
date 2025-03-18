@@ -4,7 +4,6 @@
 
 import { assertEquals } from '@std/assert';
 import * as commands from '../src/commands/mod.ts';
-import { ImapSearchCriteria } from '../src/types/mod.ts';
 
 // Test LIST command
 Deno.test('list command formats correctly with empty reference', () => {
@@ -118,4 +117,30 @@ Deno.test('copy command formats correctly', () => {
 Deno.test('move command formats correctly', () => {
   const result = commands.move('1:5', 'Archive');
   assertEquals(result, 'MOVE 1:5 Archive');
+});
+
+// Test APPEND command
+Deno.test('append command formats correctly with ASCII message', () => {
+  const result = commands.append('INBOX', 'Hello, World!');
+  assertEquals(result, 'APPEND INBOX {13}');
+});
+
+Deno.test('append command correctly calculates length for UTF-8 characters', () => {
+  // Test with various multi-byte UTF-8 characters:
+  // - '🌟' (star emoji) is 4 bytes
+  // - '中' (Chinese character) is 3 bytes
+  // - 'é' (Latin e with acute) is 2 bytes
+  // - 'a' (ASCII) is 1 byte
+  // Total: 10 bytes
+  const result = commands.append('INBOX', '🌟中éa');
+  assertEquals(result, 'APPEND INBOX {10}');
+});
+
+Deno.test('append command formats correctly with flags and date', () => {
+  const date = new Date('2024-03-13T12:00:00Z');
+  const message = '🌟 Important message'; // '🌟' is 4 bytes
+  const result = commands.append('INBOX', message, ['\\Seen', '\\Flagged'], date);
+  // 4 bytes for 🌟 + 18 bytes for " Important message" = 22 bytes total
+  assertEquals(result.startsWith('APPEND INBOX (\\Seen \\Flagged) "13-Mar-2024 '), true);
+  assertEquals(result.endsWith('" {22}'), true);
 });

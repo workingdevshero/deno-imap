@@ -53,6 +53,20 @@ try {
   // Get server capabilities
   console.log('Server capabilities:', client.capabilities);
 
+  // Append a new message with multi-byte characters
+  console.log('Appending a new message to INBOX...');
+  await client.appendMessage(
+    'INBOX',
+    'Subject: Special Announcement\r\n' +
+      'From: user@example.com\r\n' +
+      'Date: Fri, 13 Mar 2024 12:00:00 +0000\r\n' +
+      '\r\n' +
+      'Hello! 🌟 Important announcement in English and Chinese (你好)!\r\n',
+    ['\\Seen'], // Mark as read
+    new Date(), // Use current date
+  );
+  console.log('Message appended successfully');
+
   // List available mailboxes
   const mailboxes = await client.listMailboxes();
   console.log('\nAvailable mailboxes:');
