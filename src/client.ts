@@ -55,15 +55,10 @@ export class ImapClient {
   private _capabilities: Set<string> = new Set();
   /** Currently selected mailbox */
   private _selectedMailbox?: ImapMailbox;
-  /** Command timeout cancellable promise */
-  private commandTimeoutCancellable?: ReturnType<typeof createCancellablePromise>;
   /** Whether the client is authenticated */
   private _authenticated = false;
-  /** Command promises */
-  private commandPromises: Map<
-    string,
-    { resolve: (value: string[]) => void; reject: (reason: Error) => void }
-  > = new Map();
+  /** Active command cancellable promises */
+  private activeCommands: Map<string, ReturnType<typeof createCancellablePromise>> = new Map();
   /** Reconnection attempt counter */
   private reconnectAttempts = 0;
   /** Whether a reconnection is in progress */
@@ -152,13 +147,13 @@ export class ImapClient {
       return;
     }
 
-    // First, cancel any pending command timeouts
-    if (this.commandTimeoutCancellable) {
-      this.commandTimeoutCancellable.disableTimeout();
-      this.commandTimeoutCancellable = undefined;
-    }
-
     try {
+      // First, cancel all active commands
+      for (const [tag, cancellable] of this.activeCommands.entries()) {
+        cancellable.disableTimeout();
+        this.activeCommands.delete(tag);
+      }
+
       // Try to send LOGOUT command with a shorter timeout
       try {
         // Use executeCommand with a shorter timeout for the LOGOUT command
@@ -178,15 +173,6 @@ export class ImapClient {
         console.warn('Error during LOGOUT command:', error);
       }
     } finally {
-      // Cancel all pending commands immediately
-      for (const [tag, promise] of this.commandPromises.entries()) {
-        promise.reject(new ImapConnectionError('Connection closed by client'));
-        this.commandPromises.delete(tag);
-      }
-
-      // Clear command promises map
-      this.commandPromises.clear();
-
       // Disconnect the connection
       this.connection.disconnect();
 
@@ -194,6 +180,7 @@ export class ImapClient {
       this._authenticated = false;
       this._selectedMailbox = undefined;
       this._capabilities.clear();
+      this.activeCommands.clear();
 
       // Reset reconnection state
       this.reconnectAttempts = 0;
@@ -834,50 +821,79 @@ export class ImapClient {
       await this.authenticate();
     }
 
-    try {
-      // Send the APPEND command
-      const tag = this.generateTag();
-      const command = commands.append(mailbox, message, flags, date);
+    const tag = this.generateTag();
+    const timeoutMs = this.options.commandTimeout || 30000;
+    
+    const cancellable = createCancellablePromise<void>(
+      async () => {
+        try {
+          // Send the APPEND command
+          const command = commands.append(mailbox, message, flags, date);
+          await this.connection.writeLine(`${tag} ${command}`);
 
-      await this.connection.writeLine(`${tag} ${command}`);
+          // Wait for the continuation response
+          const response = await this.connection.readLine();
 
-      // Wait for the continuation response
-      const response = await this.connection.readLine();
-
-      if (!response.startsWith('+')) {
-        throw new ImapCommandError('APPEND', response);
-      }
-
-      // Send the message content
-      await this.connection.writeLine(message);
-
-      // Wait for the command completion
-      await this.waitForCommandCompletion(tag);
-    } catch (error) {
-      // Handle connection errors
-      if (
-        error instanceof ImapTimeoutError ||
-        error instanceof ImapConnectionError
-      ) {
-        // If the connection was lost, attempt to reconnect if enabled
-        if (
-          this.options.autoReconnect &&
-          error instanceof ImapConnectionError
-        ) {
-          try {
-            await this.reconnect();
-
-            // If reconnection was successful, retry the append operation
-            // Note: The message may have been partially appended before the connection was lost
-            return await this.appendMessage(mailbox, message, flags, date);
-          } catch (_reconnectError) {
-            // If reconnection failed, throw the original error
-            throw error;
+          if (!response.startsWith('+')) {
+            throw new ImapCommandError('APPEND', response);
           }
-        }
-      }
 
-      throw error;
+          // Send the message content
+          await this.connection.writeLine(message);
+
+          // Wait for the command completion
+          while (true) {
+            const line = await this.connection.readLine();
+            
+            if (line.startsWith(tag)) {
+              // Command completed
+              if (!line.includes('OK')) {
+                throw new ImapCommandError('APPEND', line);
+              }
+              break;
+            }
+          }
+        } catch (error) {
+          // If the error is from the connection (e.g., socket timeout),
+          // clean up and rethrow
+          if (
+            error instanceof ImapTimeoutError ||
+            error instanceof ImapConnectionError
+          ) {
+            // If the connection was lost, attempt to reconnect if enabled
+            if (
+              this.options.autoReconnect &&
+              error instanceof ImapConnectionError
+            ) {
+              try {
+                await this.reconnect();
+
+                // If reconnection was successful, retry the append operation
+                // Note: The message may have been partially appended before the connection was lost
+                await this.appendMessage(mailbox, message, flags, date);
+                return;
+              } catch (_reconnectError) {
+                // If reconnection failed, throw the original error
+                throw error;
+              }
+            }
+          }
+
+          throw error;
+        }
+      },
+      timeoutMs,
+      `APPEND command timeout`
+    );
+
+    // Store the cancellable promise for potential early cancellation
+    this.activeCommands.set(tag, cancellable);
+
+    try {
+      await cancellable.promise;
+    } finally {
+      cancellable.disableTimeout();
+      this.activeCommands.delete(tag);
     }
   }
 
@@ -892,10 +908,7 @@ export class ImapClient {
     }
 
     const tag = this.generateTag();
-    const _commandPromise = new Promise<string[]>((resolve, reject) => {
-      this.commandPromises.set(tag, { resolve, reject });
-    });
-
+    
     // Create a cancellable timeout promise
     const timeoutMs = this.options.commandTimeout || 30000;
     const cancellable = createCancellablePromise<string[]>(
@@ -913,23 +926,15 @@ export class ImapClient {
 
             if (line.startsWith(tag)) {
               // Command completed
-              if (line.includes('OK')) {
-                this.commandPromises.get(tag)?.resolve(responseLines);
-              } else {
-                this.commandPromises
-                  .get(tag)
-                  ?.reject(new ImapCommandError(command, line));
+              if (!line.includes('OK')) {
+                throw new ImapCommandError(command, line);
               }
-
-              this.commandPromises.delete(tag);
               break;
             }
           }
 
           return responseLines;
         } catch (error) {
-          this.commandPromises.delete(tag);
-
           // If the error is from the connection (e.g., socket timeout),
           // clean up and rethrow
           if (
@@ -945,7 +950,7 @@ export class ImapClient {
                 await this.reconnect();
 
                 // If reconnection was successful, retry the command
-                return await this.executeCommand(command);
+                return this.executeCommand(command);
               } catch (_reconnectError) {
                 // If reconnection failed, throw the original error
                 throw error;
@@ -961,15 +966,13 @@ export class ImapClient {
       `Command timeout: ${command}`,
     );
 
-    // Store the cancellable promise for later cleanup
-    this.commandTimeoutCancellable = cancellable;
+    // Store the cancellable promise for potential early cancellation
+    this.activeCommands.set(tag, cancellable);
 
     try {
       // Wait for the command to complete or timeout
       return await cancellable.promise;
     } catch (error) {
-      this.commandPromises.delete(tag);
-
       // Automatically disconnect on timeout
       if (error instanceof ImapTimeoutError) {
         console.warn(`Command timed out: ${command}. Disconnecting...`);
@@ -993,68 +996,10 @@ export class ImapClient {
 
       throw error;
     } finally {
-      // Clear the timeout
+      // Clear the timeout and remove from active commands
       cancellable.disableTimeout();
-      this.commandTimeoutCancellable = undefined;
+      this.activeCommands.delete(tag);
     }
-  }
-
-  /**
-   * Waits for a command to complete
-   * @param tag Command tag
-   * @returns Promise that resolves when the command completes
-   */
-  private async waitForCommandCompletion(tag: string): Promise<string[]> {
-    const responseLines: string[] = [];
-
-    while (true) {
-      try {
-        const line = await this.connection.readLine();
-        responseLines.push(line);
-
-        if (line.startsWith(tag)) {
-          // Command completed
-          if (!line.includes('OK')) {
-            throw new ImapCommandError('command', line);
-          }
-
-          break;
-        }
-      } catch (error) {
-        // If the error is from the connection (e.g., socket timeout),
-        // clean up and rethrow
-        if (
-          error instanceof ImapTimeoutError ||
-          error instanceof ImapConnectionError
-        ) {
-          // If the connection was lost, attempt to reconnect if enabled
-          if (
-            this.options.autoReconnect &&
-            error instanceof ImapConnectionError
-          ) {
-            try {
-              await this.reconnect();
-
-              // If reconnection was successful, we can't continue waiting for this command
-              // as the server won't remember it. Throw an error to indicate the command failed.
-              throw new ImapCommandError(
-                'command',
-                'Connection lost during command execution and was reconnected. The command may or may not have been executed.',
-              );
-            } catch (_reconnectError) {
-              // If reconnection failed, throw the original error
-              throw error;
-            }
-          }
-
-          throw error;
-        }
-        // Otherwise, rethrow the error
-        throw error;
-      }
-    }
-
-    return responseLines;
   }
 
   /**
@@ -1167,20 +1112,11 @@ export class ImapClient {
    * This is more aggressive than disconnect() as it doesn't try to send a LOGOUT command
    */
   close(): void {
-    // Cancel any pending command timeouts
-    if (this.commandTimeoutCancellable) {
-      this.commandTimeoutCancellable.disableTimeout();
-      this.commandTimeoutCancellable = undefined;
+    // Cancel all active commands immediately
+    for (const [tag, cancellable] of this.activeCommands.entries()) {
+      cancellable.disableTimeout();
+      this.activeCommands.delete(tag);
     }
-
-    // Cancel all pending commands immediately
-    for (const [tag, promise] of this.commandPromises.entries()) {
-      promise.reject(new ImapConnectionError('Connection forcibly closed by client'));
-      this.commandPromises.delete(tag);
-    }
-
-    // Clear command promises map
-    this.commandPromises.clear();
 
     // Disconnect the connection
     if (this.connected) {
