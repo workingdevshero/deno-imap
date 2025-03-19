@@ -822,7 +822,7 @@ export class ImapClient {
     }
 
     const tag = this.generateTag();
-    const timeoutMs = this.options.commandTimeout || 30000;
+    const timeoutMs = this.getCommandTimeout();
     
     const cancellable = createCancellablePromise<void>(
       async () => {
@@ -898,6 +898,14 @@ export class ImapClient {
   }
 
   /**
+   * Gets the command timeout value from options or uses the default
+   * @returns Timeout in milliseconds
+   */
+  private getCommandTimeout(): number {
+    return this.options.commandTimeout || DEFAULT_OPTIONS.commandTimeout!;
+  }
+
+  /**
    * Executes an IMAP command
    * @param command Command to execute
    * @returns Promise that resolves with the response lines
@@ -910,7 +918,7 @@ export class ImapClient {
     const tag = this.generateTag();
     
     // Create a cancellable timeout promise
-    const timeoutMs = this.options.commandTimeout || 30000;
+    const timeoutMs = this.getCommandTimeout();
     const cancellable = createCancellablePromise<string[]>(
       async () => {
         try {
