@@ -58,11 +58,14 @@ export class ImapClient {
   /** Whether the client is authenticated */
   private _authenticated = false;
   /** Active command cancellable promises */
-  private activeCommands: Map<string, ReturnType<typeof createCancellablePromise>> = new Map();
+  private activeCommands: Map<
+    string,
+    ReturnType<typeof createCancellablePromise>
+  > = new Map();
   /** Reconnection attempt counter */
   private reconnectAttempts = 0;
-  /** Whether a reconnection is in progress */
-  private isReconnecting = false;
+  /** Current reconnection promise */
+  private reconnectPromise: Promise<void> | null = null;
 
   /**
    * Creates a new IMAP client
@@ -98,7 +101,7 @@ export class ImapClient {
    * Whether a reconnection is in progress
    */
   get reconnecting(): boolean {
-    return this.isReconnecting;
+    return this.reconnectPromise !== null;
   }
 
   /**
@@ -184,7 +187,7 @@ export class ImapClient {
 
       // Reset reconnection state
       this.reconnectAttempts = 0;
-      this.isReconnecting = false;
+      this.reconnectPromise = null;
     }
   }
 
@@ -823,7 +826,7 @@ export class ImapClient {
 
     const tag = this.generateTag();
     const timeoutMs = this.getCommandTimeout();
-    
+
     const cancellable = createCancellablePromise<void>(
       async () => {
         try {
@@ -844,7 +847,7 @@ export class ImapClient {
           // Wait for the command completion
           while (true) {
             const line = await this.connection.readLine();
-            
+
             if (line.startsWith(tag)) {
               // Command completed
               if (!line.includes('OK')) {
@@ -883,7 +886,7 @@ export class ImapClient {
         }
       },
       timeoutMs,
-      `APPEND command timeout`
+      `APPEND command timeout`,
     );
 
     // Store the cancellable promise for potential early cancellation
@@ -902,7 +905,7 @@ export class ImapClient {
    * @returns Timeout in milliseconds
    */
   private getCommandTimeout(): number {
-    return this.options.commandTimeout || DEFAULT_OPTIONS.commandTimeout!;
+    return this.options.commandTimeout ?? DEFAULT_OPTIONS.commandTimeout!;
   }
 
   /**
@@ -916,7 +919,7 @@ export class ImapClient {
     }
 
     const tag = this.generateTag();
-    
+
     // Create a cancellable timeout promise
     const timeoutMs = this.getCommandTimeout();
     const cancellable = createCancellablePromise<string[]>(
@@ -1024,95 +1027,115 @@ export class ImapClient {
    * @returns Promise that resolves when reconnected
    * @throws {ImapConnectionError} If reconnection fails after max attempts
    */
-  private async reconnect(): Promise<void> {
-    // If already reconnecting, wait for that to complete
-    if (this.isReconnecting) {
-      return;
+  private reconnect(): Promise<void> {
+    // If already reconnecting, return the existing promise
+    if (this.reconnectPromise) {
+      return this.reconnectPromise;
     }
 
-    this.isReconnecting = true;
     this.reconnectAttempts = 0;
 
-    // Track the backoff timeout so we can clear it if needed
-    let backoffTimeout: number | undefined;
+    // Create a new reconnection promise
+    this.reconnectPromise = (async () => {
+      // Track the backoff timeout so we can clear it if needed
+      let backoffTimeout: number | undefined;
 
-    try {
-      // Save the currently selected mailbox to reselect after reconnection
-      let previousMailbox: string | undefined;
-      if (this._selectedMailbox) {
-        previousMailbox = this._selectedMailbox.name;
-      }
-
-      // Disconnect if still connected
-      if (this.connected) {
-        this.connection.disconnect();
-      }
-
-      // Reset state
-      this._authenticated = false;
-      this._selectedMailbox = undefined as ImapMailbox | undefined;
-      this._capabilities.clear();
-
-      // Try to reconnect with exponential backoff
-      while (this.reconnectAttempts < this.options.maxReconnectAttempts!) {
-        try {
-          console.log(
-            `Reconnection attempt ${
-              this.reconnectAttempts + 1
-            }/${this.options.maxReconnectAttempts}...`,
-          );
-
-          // Wait with exponential backoff
-          const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts);
-
-          // Use a promise with a stored timeout ID so we can clear it if needed
-          await new Promise<void>((resolve) => {
-            backoffTimeout = setTimeout(() => {
-              backoffTimeout = undefined;
-              resolve();
-            }, delay);
-          });
-
-          // Try to connect
-          await this.connect();
-
-          // If connected, authenticate
-          if (this.connected) {
-            await this.authenticate();
-
-            // If previously had a mailbox selected, reselect it
-            if (previousMailbox && this._authenticated) {
-              await this.selectMailbox(previousMailbox);
-            }
-
-            console.log('Reconnection successful');
-            this.reconnectAttempts = 0;
-            return;
-          }
-        } catch (error) {
-          console.warn(
-            `Reconnection attempt ${this.reconnectAttempts + 1} failed:`,
-            error,
-          );
+      try {
+        // Save the currently selected mailbox to reselect after reconnection
+        let previousMailbox: string | undefined;
+        if (this._selectedMailbox) {
+          previousMailbox = this._selectedMailbox.name;
         }
 
-        this.reconnectAttempts++;
-      }
+        // Disconnect if still connected
+        if (this.connected) {
+          this.connection.disconnect();
+        }
 
-      // If we get here, all reconnection attempts failed
-      const error = new ImapConnectionError(
-        `Failed to reconnect after ${this.options.maxReconnectAttempts} attempts`,
-      );
-      throw error;
-    } finally {
-      // Clear any pending backoff timeout
-      if (backoffTimeout !== undefined) {
-        clearTimeout(backoffTimeout);
-        backoffTimeout = undefined;
-      }
+        // Reset state
+        this._authenticated = false;
+        this._selectedMailbox = undefined as ImapMailbox | undefined;
+        this._capabilities.clear();
 
-      this.isReconnecting = false;
-    }
+        // Try to reconnect with exponential backoff
+        while (this.reconnectAttempts < this.options.maxReconnectAttempts!) {
+          try {
+            console.log(
+              `Reconnection attempt ${
+                this.reconnectAttempts + 1
+              }/${this.options.maxReconnectAttempts}...`,
+            );
+
+            // Wait with exponential backoff
+            const delay = this.options.reconnectDelay! *
+              Math.pow(2, this.reconnectAttempts);
+
+            // Use a promise with a stored timeout ID so we can clear it if needed
+            await this.sleep(delay, (timeoutId) => {
+              backoffTimeout = timeoutId;
+            });
+            backoffTimeout = undefined;
+
+            // Try to connect
+            await this.connect();
+
+            // If connected, authenticate
+            if (this.connected) {
+              await this.authenticate();
+
+              // If previously had a mailbox selected, reselect it
+              if (previousMailbox && this._authenticated) {
+                await this.selectMailbox(previousMailbox);
+              }
+
+              console.log('Reconnection successful');
+              this.reconnectAttempts = 0;
+              return;
+            }
+          } catch (error) {
+            console.warn(
+              `Reconnection attempt ${this.reconnectAttempts + 1} failed:`,
+              error,
+            );
+          }
+
+          this.reconnectAttempts++;
+        }
+
+        // If we get here, all reconnection attempts failed
+        const error = new ImapConnectionError(
+          `Failed to reconnect after ${this.options.maxReconnectAttempts} attempts`,
+        );
+        throw error;
+      } finally {
+        // Clear any pending backoff timeout
+        if (backoffTimeout !== undefined) {
+          clearTimeout(backoffTimeout);
+          backoffTimeout = undefined;
+        }
+
+        // Clear the reconnect promise
+        this.reconnectPromise = null;
+      }
+    })();
+
+    return this.reconnectPromise;
+  }
+
+  // Add a helper method for the sleep functionality used in reconnect
+  private sleep(
+    ms: number,
+    setTimeoutIdCallback?: (id: number) => void,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        resolve();
+      }, ms);
+
+      if (setTimeoutIdCallback) {
+        setTimeoutIdCallback(timeoutId);
+      }
+    });
   }
 
   /**
@@ -1138,6 +1161,6 @@ export class ImapClient {
 
     // Reset reconnection state
     this.reconnectAttempts = 0;
-    this.isReconnecting = false;
+    this.reconnectPromise = null;
   }
 }
