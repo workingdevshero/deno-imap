@@ -823,7 +823,7 @@ export class ImapClient {
 
     const tag = this.generateTag();
     const timeoutMs = this.options.commandTimeout || 30000;
-    
+
     const cancellable = createCancellablePromise<void>(
       async () => {
         try {
@@ -844,7 +844,7 @@ export class ImapClient {
           // Wait for the command completion
           while (true) {
             const line = await this.connection.readLine();
-            
+
             if (line.startsWith(tag)) {
               // Command completed
               if (!line.includes('OK')) {
@@ -883,7 +883,7 @@ export class ImapClient {
         }
       },
       timeoutMs,
-      `APPEND command timeout`
+      `APPEND command timeout`,
     );
 
     // Store the cancellable promise for potential early cancellation
@@ -908,7 +908,7 @@ export class ImapClient {
     }
 
     const tag = this.generateTag();
-    
+
     // Create a cancellable timeout promise
     const timeoutMs = this.options.commandTimeout || 30000;
     const cancellable = createCancellablePromise<string[]>(
