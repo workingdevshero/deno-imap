@@ -134,19 +134,19 @@ export class ImapConnection {
    */
   private async establishConnection(): Promise<void> {
     try {
-      // Create TCP connection
-      this.conn = await Deno.connect({
-        hostname: this.options.host,
-        port: this.options.port,
-      });
-
-      // Upgrade to TLS if needed
       if (this.options.tls) {
+        // Create TLS connection
         this.tlsConn = await Deno.connectTls({
           hostname: this.options.host,
           port: this.options.port,
           caCerts: this.options.tlsOptions?.caCerts,
           alpnProtocols: this.options.tlsOptions?.alpnProtocols,
+        });
+      } else {
+        // Create plain TCP connection
+        this.conn = await Deno.connect({
+          hostname: this.options.host,
+          port: this.options.port,
         });
       }
     } catch (error) {
