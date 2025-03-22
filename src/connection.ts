@@ -105,16 +105,13 @@ export class ImapConnection {
       // Wait for the connection to be established or timeout
       await this.connectionTimeoutCancellable.promise;
 
-      // Clear the timeout
-      this.connectionTimeoutCancellable.disableTimeout();
-
       // Start socket activity monitoring
-      this.resetSocketActivity();
+      await this.resetSocketActivity();
 
       this._connected = true;
     } catch (error) {
       // Clean up if connection fails
-      this.disconnect();
+      await this.disconnect();
 
       if (error instanceof ImapError) {
         throw error;
@@ -160,10 +157,14 @@ export class ImapConnection {
    * Resets the socket activity monitor
    * This creates a new cancellable promise that will timeout if no socket activity occurs
    */
-  private resetSocketActivity(): void {
+  private async resetSocketActivity(): Promise<void> {
     // Clear any existing socket activity monitor
     if (this.socketActivityCancellable) {
-      this.socketActivityCancellable.disableTimeout();
+      const promise = this.socketActivityCancellable.promise.catch(() => {
+        // Ignore any errors from cancelled commands
+      });
+      this.socketActivityCancellable.cancel('Resetting socket activity monitor');
+      await promise;
       this.socketActivityCancellable = undefined;
     }
 
@@ -182,10 +183,10 @@ export class ImapConnection {
     );
 
     // When the socket times out, disconnect
-    this.socketActivityCancellable.promise.catch((error) => {
+    this.socketActivityCancellable.promise.catch(async (error) => {
       if (error instanceof ImapTimeoutError) {
         console.log('Socket inactivity timeout, disconnecting');
-        this.disconnect();
+        await this.disconnect();
       }
     });
   }
@@ -193,16 +194,24 @@ export class ImapConnection {
   /**
    * Disconnects from the IMAP server and cleans up resources
    */
-  disconnect(): void {
-    // Clear connection timeout
+  async disconnect(): Promise<void> {
+    // Handle connection timeout cancellable
     if (this.connectionTimeoutCancellable) {
-      this.connectionTimeoutCancellable.disableTimeout();
+      const promise = this.connectionTimeoutCancellable.promise.catch(() => {
+        // Ignore any errors from cancelled commands
+      });
+      this.connectionTimeoutCancellable.cancel('Disconnecting');
+      await promise;
       this.connectionTimeoutCancellable = undefined;
     }
 
-    // Clear socket activity monitor
+    // Handle socket activity cancellable
     if (this.socketActivityCancellable) {
-      this.socketActivityCancellable.disableTimeout();
+      const promise = this.socketActivityCancellable.promise.catch(() => {
+        // Ignore any errors from cancelled commands
+      });
+      this.socketActivityCancellable.cancel('Disconnecting');
+      await promise;
       this.socketActivityCancellable = undefined;
     }
 
@@ -212,11 +221,7 @@ export class ImapConnection {
         this.tlsConn.close();
         this.tlsConn = undefined;
       }
-    } catch (_) {
-      // Ignore errors
-    }
 
-    try {
       if (this.conn) {
         this.conn.close();
         this.conn = undefined;
@@ -242,7 +247,7 @@ export class ImapConnection {
     }
 
     // Reset socket activity monitor
-    this.resetSocketActivity();
+    await this.resetSocketActivity();
 
     const bytes = this.encoder.encode(data);
     const conn = this.tlsConn || this.conn;
@@ -254,7 +259,7 @@ export class ImapConnection {
     try {
       await conn.write(bytes);
     } catch (error) {
-      this.disconnect();
+      await this.disconnect();
       throw new ImapConnectionError(
         'Failed to write to socket',
         error instanceof Error ? error : new Error(String(error)),
@@ -282,7 +287,7 @@ export class ImapConnection {
     }
 
     // Reset socket activity monitor
-    this.resetSocketActivity();
+    await this.resetSocketActivity();
 
     const conn = this.tlsConn || this.conn;
 
@@ -300,7 +305,7 @@ export class ImapConnection {
 
             if (bytesRead === null) {
               // Connection closed
-              this.disconnect();
+              await this.disconnect();
               throw new ImapConnectionError('Connection closed by server');
             }
 
@@ -309,7 +314,7 @@ export class ImapConnection {
           } catch (error) {
             // Handle connection errors
             if (!(error instanceof ImapTimeoutError)) {
-              this.disconnect();
+              await this.disconnect();
             }
             throw error instanceof Error
               ? error
@@ -330,7 +335,7 @@ export class ImapConnection {
     } catch (error) {
       // If it's a timeout error, disconnect and rethrow
       if (error instanceof ImapTimeoutError) {
-        this.disconnect();
+        await this.disconnect();
       }
 
       // Rethrow the error
@@ -363,7 +368,7 @@ export class ImapConnection {
       this.bufferedData = this.bufferedData.substring(crlfIndex + CRLF.length);
 
       // Reset socket activity monitor since we successfully read data
-      this.resetSocketActivity();
+      await this.resetSocketActivity();
 
       return line;
     }

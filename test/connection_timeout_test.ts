@@ -24,15 +24,12 @@ Deno.test('ImapConnection - Socket timeout handling', async () => {
 
   // Create a socket activity cancellable that will immediately timeout
   const mockCancellable = {
-    promise: Promise.reject(new ImapTimeoutError('Socket inactivity timeout', 100)),
+    promise: Promise.reject(
+      new ImapTimeoutError('Socket inactivity timeout', 100),
+    ),
     cancel: () => {},
     disableTimeout: () => {},
   };
-
-  // Set up a handler for the promise rejection
-  mockCancellable.promise.catch(() => {
-    // This prevents the unhandled promise rejection
-  });
 
   // Manually trigger disconnect when the timeout occurs
   (connection as any).disconnect = () => {
@@ -63,7 +60,7 @@ Deno.test('ImapConnection - Socket timeout handling', async () => {
   );
 });
 
-Deno.test('ImapConnection - Socket activity reset on operations', () => {
+Deno.test('ImapConnection - Socket activity reset on operations', async () => {
   // Create a connection with mock socket
   const connection = new ImapConnection({
     host: 'localhost',
@@ -76,7 +73,7 @@ Deno.test('ImapConnection - Socket activity reset on operations', () => {
 
   // Mock the socket activity reset
   let activityResetCount = 0;
-  (connection as any).resetSocketActivity = () => {
+  (connection as any).resetSocketActivity = async () => {
     activityResetCount++;
   };
 
@@ -91,14 +88,14 @@ Deno.test('ImapConnection - Socket activity reset on operations', () => {
     },
   };
 
-  // Call the methods directly without awaiting
-  (connection as any).resetSocketActivity();
+  // Call the methods and await
+  await (connection as any).resetSocketActivity();
 
   // Verify activity monitor was reset
   assertEquals(activityResetCount, 1);
 });
 
-Deno.test('ImapConnection - Socket activity cleanup', () => {
+Deno.test('ImapConnection - Socket activity cleanup', async () => {
   // Create a connection
   const connection = new ImapConnection({
     host: 'localhost',
@@ -110,27 +107,24 @@ Deno.test('ImapConnection - Socket activity cleanup', () => {
   });
 
   // Mock the connection and activity monitor
+  let cancelCalled = false;
   (connection as any)._connected = true;
   (connection as any).socketActivityCancellable = {
     promise: Promise.resolve(),
-    cancel: () => {},
+    cancel: () => {
+      cancelCalled = true;
+    },
     disableTimeout: () => {},
   };
   (connection as any).conn = {
     close: () => {},
   };
 
-  // Spy on the disableTimeout method
-  let disableTimeoutCalled = false;
-  (connection as any).socketActivityCancellable.disableTimeout = () => {
-    disableTimeoutCalled = true;
-  };
-
   // Manually disconnect
-  connection.disconnect();
+  await connection.disconnect();
 
   // Verify activity monitor was disabled
-  assertEquals(disableTimeoutCalled, true);
+  assertEquals(cancelCalled, true);
 
   // Verify connection is marked as disconnected
   assertEquals((connection as any)._connected, false);

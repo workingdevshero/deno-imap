@@ -232,7 +232,6 @@ new ImapClient(options: ImapOptions)
   message to a mailbox
 - `forceReconnect()`: Forces a reconnection to the server
 - `updateCapabilities()`: Updates the server capabilities
-- `close()`: Closes the connection (alias for disconnect)
 
 #### Properties
 
