@@ -55,7 +55,6 @@ function createMockClient(): ImapClient {
     username: 'test',
     password: 'test',
     tls: false,
-    autoConnect: false,
   });
 
   // Override the connect method to avoid actual network connection
@@ -598,7 +597,6 @@ Deno.test('ImapClient - Test 8: Operations not allowed without connection', asyn
     username: 'test',
     password: 'test',
     tls: false,
-    autoConnect: false,
   });
 
   // Authenticate without connection

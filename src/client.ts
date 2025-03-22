@@ -34,7 +34,6 @@ import type {
  * Default options for the IMAP client
  */
 const DEFAULT_OPTIONS: Partial<ImapOptions> = {
-  autoConnect: true,
   autoReconnect: true,
   maxReconnectAttempts: 3,
   reconnectDelay: 1000,
@@ -58,7 +57,10 @@ export class ImapClient {
   /** Whether the client is authenticated */
   private _authenticated = false;
   /** Active command cancellable promises */
-  private activeCommands: Map<string, ReturnType<typeof createCancellablePromise>> = new Map();
+  private activeCommands: Map<
+    string,
+    ReturnType<typeof createCancellablePromise>
+  > = new Map();
   /** Reconnection attempt counter */
   private reconnectAttempts = 0;
   /** Whether a reconnection is in progress */
@@ -71,13 +73,6 @@ export class ImapClient {
   constructor(options: ImapOptions) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.connection = new ImapConnection(this.options);
-
-    if (this.options.autoConnect) {
-      this.connect().catch((error) => {
-        console.error('Failed to auto-connect:', error);
-        // Error is propagated to the caller via the returned promise
-      });
-    }
   }
 
   /**

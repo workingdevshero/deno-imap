@@ -43,7 +43,6 @@ const client = new ImapClient({
   tls: Deno.env.get('IMAP_USE_TLS') !== 'false', // Default to true if not explicitly set to false
   username: Deno.env.get('IMAP_USERNAME')!,
   password: Deno.env.get('IMAP_PASSWORD')!,
-  autoConnect: false, // Don't connect automatically
 });
 
 async function main() {

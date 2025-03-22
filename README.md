@@ -196,7 +196,6 @@ new ImapClient(options: ImapOptions)
 - `username`: Username for authentication
 - `password`: Password for authentication
 - `authMechanism`: Authentication mechanism to use (default: "PLAIN")
-- `autoConnect`: Whether to automatically connect on client creation (default: true)
 - `autoReconnect`: Whether to automatically reconnect on connection loss (default: true)
 - `maxReconnectAttempts`: Maximum number of reconnection attempts (default: 3)
 - `reconnectDelay`: Delay between reconnection attempts in milliseconds (default: 1000)

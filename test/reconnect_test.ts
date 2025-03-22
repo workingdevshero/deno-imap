@@ -48,7 +48,6 @@ function createMockClient(options: {
     username: 'test',
     password: 'test',
     tls: false,
-    autoConnect: false,
     autoReconnect: options.shouldReconnect !== false,
     maxReconnectAttempts: options.reconnectAttempts || 3,
     reconnectDelay: 10, // Use a small delay for faster tests
