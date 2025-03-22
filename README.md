@@ -192,7 +192,7 @@ new ImapClient(options: ImapOptions)
 
 - `host`: IMAP server hostname
 - `port`: IMAP server port
-- `tls`: Whether to use TLS
+- `tls`: Whether to use TLS (default: true)
 - `username`: Username for authentication
 - `password`: Password for authentication
 - `authMechanism`: Authentication mechanism to use (default: "PLAIN")

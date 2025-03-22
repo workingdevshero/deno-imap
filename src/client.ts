@@ -38,6 +38,7 @@ const DEFAULT_OPTIONS: Partial<ImapOptions> = {
   maxReconnectAttempts: 3,
   reconnectDelay: 1000,
   commandTimeout: 30000,
+  tls: true,
 };
 
 /**
