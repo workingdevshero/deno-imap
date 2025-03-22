@@ -7,8 +7,6 @@
  * Options for configuring the IMAP client
  */
 export interface ImapOptions extends ImapConnectionOptions {
-  /** Whether to automatically connect on client creation */
-  autoConnect?: boolean;
   /** Whether to automatically reconnect on connection loss */
   autoReconnect?: boolean;
   /** Maximum number of reconnection attempts */

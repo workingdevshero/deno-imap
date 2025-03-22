@@ -91,12 +91,10 @@ try {
     await client.disconnect();
     console.log('\nDisconnected from IMAP server');
   } catch (error) {
-    // If disconnect fails, force close
     console.error(
       'Error during disconnect:',
       error instanceof Error ? error.message : String(error),
     );
-    client.close();
-    console.log('\nForced close of IMAP client');
+    console.log('\nFailed to disconnect cleanly from IMAP server');
   }
 }

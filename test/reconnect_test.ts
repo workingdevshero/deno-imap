@@ -48,7 +48,6 @@ function createMockClient(options: {
     username: 'test',
     password: 'test',
     tls: false,
-    autoConnect: false,
     autoReconnect: options.shouldReconnect !== false,
     maxReconnectAttempts: options.reconnectAttempts || 3,
     reconnectDelay: 10, // Use a small delay for faster tests
@@ -305,7 +304,6 @@ Deno.test('ImapClient - Connection timeout in ImapConnection', async () => {
   const mockCancellable = {
     promise: Promise.reject(new ImapTimeoutError('Socket inactivity timeout', 100)),
     cancel: () => {},
-    disableTimeout: () => {},
   };
 
   // Set up a handler for the promise rejection to prevent unhandled rejection

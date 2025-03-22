@@ -192,11 +192,10 @@ new ImapClient(options: ImapOptions)
 
 - `host`: IMAP server hostname
 - `port`: IMAP server port
-- `tls`: Whether to use TLS
+- `tls`: Whether to use TLS (default: true)
 - `username`: Username for authentication
 - `password`: Password for authentication
 - `authMechanism`: Authentication mechanism to use (default: "PLAIN")
-- `autoConnect`: Whether to automatically connect on client creation (default: true)
 - `autoReconnect`: Whether to automatically reconnect on connection loss (default: true)
 - `maxReconnectAttempts`: Maximum number of reconnection attempts (default: 3)
 - `reconnectDelay`: Delay between reconnection attempts in milliseconds (default: 1000)
@@ -233,7 +232,6 @@ new ImapClient(options: ImapOptions)
   message to a mailbox
 - `forceReconnect()`: Forces a reconnection to the server
 - `updateCapabilities()`: Updates the server capabilities
-- `close()`: Closes the connection (alias for disconnect)
 
 #### Properties
 
