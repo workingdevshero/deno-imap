@@ -304,7 +304,6 @@ Deno.test('ImapClient - Connection timeout in ImapConnection', async () => {
   const mockCancellable = {
     promise: Promise.reject(new ImapTimeoutError('Socket inactivity timeout', 100)),
     cancel: () => {},
-    disableTimeout: () => {},
   };
 
   // Set up a handler for the promise rejection to prevent unhandled rejection

@@ -326,12 +326,7 @@ export class ImapConnection {
       );
 
       // Wait for the read operation to complete or timeout
-      const result = await cancellable.promise;
-
-      // Clear the timeout
-      cancellable.disableTimeout();
-
-      return result;
+      return await cancellable.promise;
     } catch (error) {
       // If it's a timeout error, disconnect and rethrow
       if (error instanceof ImapTimeoutError) {

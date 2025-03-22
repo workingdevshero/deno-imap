@@ -982,8 +982,6 @@ export class ImapClient {
 
       throw error;
     } finally {
-      // Clear the timeout and remove from active commands
-      cancellable.disableTimeout();
       this.activeCommands.delete(tag);
     }
   }

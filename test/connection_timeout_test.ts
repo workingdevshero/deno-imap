@@ -28,7 +28,6 @@ Deno.test('ImapConnection - Socket timeout handling', async () => {
       new ImapTimeoutError('Socket inactivity timeout', 100),
     ),
     cancel: () => {},
-    disableTimeout: () => {},
   };
 
   // Manually trigger disconnect when the timeout occurs
@@ -108,13 +107,21 @@ Deno.test('ImapConnection - Socket activity cleanup', async () => {
 
   // Mock the connection and activity monitor
   let cancelCalled = false;
+  let promiseCaught = false;
+  let rejectFn: (error: Error) => void;
   (connection as any)._connected = true;
   (connection as any).socketActivityCancellable = {
-    promise: Promise.resolve(),
+    promise: new Promise((_, reject) => {
+      // Store the reject function to be called when cancel() is called
+      rejectFn = reject;
+    }).catch(() => {
+      promiseCaught = true;
+    }),
     cancel: () => {
       cancelCalled = true;
+      // Reject the promise when cancelled
+      rejectFn(new Error('Cancelled'));
     },
-    disableTimeout: () => {},
   };
   (connection as any).conn = {
     close: () => {},
@@ -123,8 +130,9 @@ Deno.test('ImapConnection - Socket activity cleanup', async () => {
   // Manually disconnect
   await connection.disconnect();
 
-  // Verify activity monitor was disabled
+  // Verify activity monitor was cancelled
   assertEquals(cancelCalled, true);
+  assertEquals(promiseCaught, true);
 
   // Verify connection is marked as disconnected
   assertEquals((connection as any)._connected, false);

@@ -14,12 +14,8 @@ Deno.test('createCancellablePromise - resolves with the result', async () => {
     'Test timeout',
   );
 
-  try {
-    const result = await cancellable.promise;
-    assertEquals(result, expected);
-  } finally {
-    cancellable.disableTimeout();
-  }
+  const result = await cancellable.promise;
+  assertEquals(result, expected);
 });
 
 Deno.test('createCancellablePromise - rejects with the error from the promise', async () => {
@@ -32,15 +28,11 @@ Deno.test('createCancellablePromise - rejects with the error from the promise', 
     'Test timeout',
   );
 
-  try {
-    await assertRejects(
-      () => cancellable.promise,
-      Error,
-      expectedError.message,
-    );
-  } finally {
-    cancellable.disableTimeout();
-  }
+  await assertRejects(
+    () => cancellable.promise,
+    Error,
+    expectedError.message,
+  );
 });
 
 Deno.test('createCancellablePromise - times out if promise takes too long', async () => {
@@ -67,7 +59,6 @@ Deno.test('createCancellablePromise - times out if promise takes too long', asyn
   } finally {
     // Resolve the inner promise to avoid leaking it
     if (resolver) resolver();
-    cancellable.disableTimeout();
   }
 });
 
@@ -98,30 +89,5 @@ Deno.test('createCancellablePromise - can be cancelled', async () => {
   } finally {
     // Resolve the inner promise to avoid leaking it
     if (resolver) resolver();
-    cancellable.disableTimeout();
-  }
-});
-
-Deno.test('createCancellablePromise - disableTimeout prevents timeout', async () => {
-  const timeoutMs = 100;
-
-  const cancellable = createCancellablePromise<string>(
-    async () => {
-      // Use a shorter delay to avoid test timeouts
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      return 'should resolve';
-    },
-    timeoutMs,
-    'Test timeout',
-  );
-
-  // Clear the timeout
-  cancellable.disableTimeout();
-
-  try {
-    const result = await cancellable.promise;
-    assertEquals(result, 'should resolve');
-  } finally {
-    cancellable.disableTimeout(); // Just to be safe
   }
 });
