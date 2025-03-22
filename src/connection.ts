@@ -103,7 +103,11 @@ export class ImapConnection {
       );
 
       // Wait for the connection to be established or timeout
-      await this.connectionTimeoutCancellable.promise;
+      try {
+        await this.connectionTimeoutCancellable.promise;
+      } finally {
+        this.connectionTimeoutCancellable = undefined;
+      }
 
       // Start socket activity monitoring
       await this.resetSocketActivity();
