@@ -92,6 +92,6 @@ export function createCancellablePromise<T>(
         isSettled = true;
         clearTimer();
       }
-    }
+    },
   };
 }
