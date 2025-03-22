@@ -4,7 +4,7 @@
  * This file contains tests for the IMAP connection's timeout error handling.
  */
 
-import { assertEquals, assertRejects } from 'https://deno.land/std/assert/mod.ts';
+import { assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { ImapConnection } from '../src/connection.ts';
 import { ImapTimeoutError } from '../src/errors.ts';
 

@@ -2,7 +2,7 @@
  * Tests for promise utilities
  */
 
-import { assertEquals, assertRejects } from 'https://deno.land/std/testing/asserts.ts';
+import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/testing/asserts.ts";
 import { createCancellablePromise } from '../../src/utils/promises.ts';
 import { ImapTimeoutError } from '../../src/errors.ts';
 
